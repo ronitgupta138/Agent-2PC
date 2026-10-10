@@ -12,10 +12,10 @@
 ### **Two-Phase Commit & Compensating Journaling Engine for AI Agent Tool Execution**
 
 [![GitHub Stars](https://img.shields.io/github/stars/ronitgupta138/agent-2pc?style=flat-square&color=0891b2&labelColor=0a0b0e)](https://github.com/ronitgupta138/agent-2pc/stargazers)
-[![Crates.io](https://img.shields.io/badge/crates.io-v0.1.0-0891b2?style=flat-square&labelColor=0a0b0e)](https://crates.io/crates/agent-2pc)
+[![Crates.io](https://img.shields.io/badge/crates.io-v0.2.0-0891b2?style=flat-square&labelColor=0a0b0e)](https://crates.io/crates/agent-2pc)
 [![License: MIT](https://img.shields.io/badge/License-MIT-0891b2?style=flat-square&labelColor=0a0b0e)](LICENSE)
 [![Rust: 1.80+](https://img.shields.io/badge/Rust-1.80+-0891b2?style=flat-square&labelColor=0a0b0e)](https://www.rust-lang.org)
-[![Build Status](https://img.shields.io/badge/Tests-7%2F7%20Passing-0891b2?style=flat-square&labelColor=0a0b0e)](#-verification--test-suite)
+[![Build Status](https://img.shields.io/badge/Tests-13%2F13%20Passing-0891b2?style=flat-square&labelColor=0a0b0e)](#-verification--test-suite)
 [![Views](https://hits.sh/github.com/ronitgupta138/agent-2pc.svg?style=flat-square&label=Views&color=0891b2&labelColor=0a0b0e)](https://hits.sh/github.com/ronitgupta138/agent-2pc/)
 [![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa?style=flat-square&labelColor=0a0b0e)](https://github.com/sponsors/ronitgupta138)
 
@@ -151,21 +151,72 @@ agent-2pc commit --tid "$TID"
 
 ## 🤖 AI Agent & MCP (Model Context Protocol) Integration
 
-`agent-2pc` includes a drop-in Model Context Protocol server (`examples/mcp_agent_server.py`) for **Claude Desktop, Cursor, and Hermes Agent**.
+`agent-2pc` includes a **zero-dependency embedded Model Context Protocol (MCP) server** running standard JSON-RPC 2.0 over stdio.
 
-### Add to Claude Desktop (`claude_desktop_config.json`)
+### Drop-in Setup for Claude Desktop (`claude_desktop_config.json`)
 ```json
 {
   "mcpServers": {
     "agent-2pc": {
-      "command": "python3",
-      "args": ["/path/to/agent-2pc/examples/mcp_agent_server.py"]
+      "command": "agent-2pc",
+      "args": ["mcp"]
     }
   }
 }
 ```
 
-### One-Shot Batch Manifest Execution
+### Available MCP Tools:
+- `agent_2pc_begin`: Starts a transaction session; returns `tid`.
+- `agent_2pc_record_read`: Registers OCC read-set fingerprint on code files before generating modifications.
+- `agent_2pc_stage_write`: Stages file edits into isolated scratch memory without touching repository code.
+- `agent_2pc_stage_patch`: Stages unified diff patches in scratch memory.
+- `agent_2pc_stage_cmd`: Runs syntax checks, tests, or linters in scratch sandbox before commit.
+- `agent_2pc_stage_api`: Reserves external API leases with compensation tokens.
+- `agent_2pc_commit`: Atomically materializes all staged actions across all tools.
+- `agent_2pc_abort`: Deterministically rolls back all staged work if any step fails.
+- `agent_2pc_status`: Inspects active transactions and receipts count.
+
+---
+
+## 🔒 Optimistic Concurrency Control (OCC) for Multi-Agent Swarms
+
+When multiple autonomous agents or human developers edit the same repository concurrently, `agent-2pc` prevents **lost updates and silent overwrites**:
+
+```bash
+# 1. Agent reads a file and registers OCC fingerprint
+agent-2pc record-read --tid "$TID" --path "src/auth.rs"
+
+# 2. If another process modifies src/auth.rs while the agent was planning...
+# 3. Phase 1 PREPARE automatically detects hash mismatch and aborts:
+# ✖ ABORTED: Conflict detected: file src/auth.rs was modified concurrently
+```
+
+---
+
+## 🖥️ Live Terminal Monitor & Transaction HUD
+
+Inspect in-flight transactions, WAL disk usage, and recovery health in real-time:
+
+```bash
+agent-2pc monitor
+```
+
+```text
+┌────────────────────────────────────────────────────────────────────────┐
+│  ⚡ agent-2pc Live Transaction Monitor & HUD                           │
+├────────────────────────────────────────────────────────────────────────┤
+│  Workspace      :: .agent-tx                                          │
+│  WAL Log        :: 4.2 KB (18 records, CRC32 verified)                │
+│  Scratch Dir    :: 0.0 KB in-flight                                   │
+│  System State   :: HEALTHY (Durability verified, zero leaks)          │
+├────────────────────────────────────────────────────────────────────────┤
+│  Transactions: 1 Active  |  12 Committed  |  1 Aborted                 │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🤖 One-Shot Batch Manifest Execution
 AI agent planners can submit an entire multi-step transaction plan as an atomic JSON document:
 
 ```json
@@ -230,16 +281,22 @@ cargo test
 ```
 
 ```
-running 7 tests
+running 13 tests
+test test_reflink_or_copy_snapshot_staging ... ok
+test test_monitor_stats_collection ... ok
 test test_wal_framing_and_crc32_tamper_detection ... ok
+test test_optimistic_concurrency_conflict_detection ... ok
 test test_api_adapter_lease_and_compensation ... ok
 test test_crash_recovery_uncommitted_rollback ... ok
 test test_2pc_partial_failure_deterministic_rollback ... ok
 test test_2pc_all_prepared_atomic_commit ... ok
+test test_parallel_prepare_with_short_circuit_abort ... ok
+test test_mcp_initialize_and_tools_list ... ok
+test test_mcp_begin_stage_commit_flow ... ok
 test test_wal_append_latency_benchmark ... ok
 test test_end_to_end_2pc_transaction_throughput ... ok
 
-test result: ok. 7 passed; 0 failed; 0 ignored; finished in 1.76s
+test result: ok. 13 passed; 0 failed; 0 ignored; finished in 1.78s
 ```
 
 ---
