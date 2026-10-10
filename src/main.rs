@@ -181,6 +181,25 @@ enum Commands {
 
     /// Display terminal live monitor and transaction HUD
     Monitor,
+
+    /// Perform 3-way semantic file merge for concurrent agent reconciliation
+    Merge {
+        /// Base common ancestor file
+        #[arg(long)]
+        base: PathBuf,
+
+        /// Committed file version
+        #[arg(long)]
+        ours: PathBuf,
+
+        /// Staged file version
+        #[arg(long)]
+        theirs: PathBuf,
+
+        /// Destination output file (prints to stdout if omitted)
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
 }
 
 #[derive(Serialize, Deserialize)]
@@ -751,6 +770,49 @@ fn run_cli(cli: Cli) -> Result<(), TxError> {
                 println!("{}", serde_json::to_string_pretty(&stats)?);
             } else {
                 monitor.render_terminal()?;
+            }
+        }
+
+        Commands::Merge {
+            base,
+            ours,
+            theirs,
+            output,
+        } => {
+            let base_str = fs::read_to_string(&base)?;
+            let ours_str = fs::read_to_string(&ours)?;
+            let theirs_str = fs::read_to_string(&theirs)?;
+
+            let merge_res = agent_2pc::merge::ThreeWayMerger::merge(&base_str, &ours_str, &theirs_str);
+            match merge_res {
+                agent_2pc::merge::MergeResult::Clean(merged) => {
+                    if let Some(out_path) = output {
+                        fs::write(&out_path, &merged)?;
+                        println!("✔ Clean merge written to {}", out_path.display());
+                    } else if cli.json {
+                        println!("{}", serde_json::json!({
+                            "status": "clean",
+                            "merged": merged
+                        }));
+                    } else {
+                        println!("{}", merged);
+                    }
+                }
+                agent_2pc::merge::MergeResult::Conflict {
+                    merged_with_markers,
+                    conflict_count,
+                } => {
+                    if cli.json {
+                        println!("{}", serde_json::json!({
+                            "status": "conflict",
+                            "conflict_count": conflict_count,
+                            "merged": merged_with_markers
+                        }));
+                    } else {
+                        eprintln!("✖ Merge conflict ({} conflicts detected)", conflict_count);
+                        println!("{}", merged_with_markers);
+                    }
+                }
             }
         }
     }
