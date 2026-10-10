@@ -20,6 +20,7 @@ anyhow = "1.0"
 tempfile = "3.13"
 walkdir = "2.5"
 colored = "2.1"
+libc = "0.2"
 
 [[bin]]
 name = "agent-2pc"

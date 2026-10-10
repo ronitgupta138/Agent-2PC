@@ -7,6 +7,33 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+/// Perform a zero-copy Copy-on-Write (CoW) reflink clone on Linux (via FICLONE ioctl),
+/// falling back to standard copy if the filesystem does not support reflinks.
+#[cfg(target_os = "linux")]
+pub fn reflink_or_copy(src: &Path, dst: &Path) -> std::io::Result<()> {
+    use std::os::unix::io::AsRawFd;
+
+    let src_file = fs::File::open(src)?;
+    let dst_file = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(dst)?;
+
+    const FICLONE: libc::c_ulong = 0x40049409;
+    let ret = unsafe { libc::ioctl(dst_file.as_raw_fd(), FICLONE, src_file.as_raw_fd()) };
+    if ret == 0 {
+        return Ok(());
+    }
+
+    fs::copy(src, dst).map(|_| ())
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn reflink_or_copy(src: &Path, dst: &Path) -> std::io::Result<()> {
+    fs::copy(src, dst).map(|_| ())
+}
+
 /// Trait implemented by any resource participating in a Two-Phase Commit transaction.
 pub trait ResourceManager: Send + Sync {
     /// Return the unique participant identifier.
@@ -71,7 +98,7 @@ impl ResourceManager for FsAdapter {
                     let backup_dir = scratch_dir.join(tid.to_string()).join("backups");
                     fs::create_dir_all(&backup_dir)?;
                     let backup_file = backup_dir.join(format!("{}.bak", self.id.0));
-                    fs::copy(path, &backup_file)?;
+                    reflink_or_copy(path, &backup_file)?;
                     receipt.backup_paths.push(backup_file);
                 }
 
@@ -96,7 +123,7 @@ impl ResourceManager for FsAdapter {
                 let backup_dir = scratch_dir.join(tid.to_string()).join("backups");
                 fs::create_dir_all(&backup_dir)?;
                 let backup_file = backup_dir.join(format!("{}.bak", self.id.0));
-                fs::copy(path, &backup_file)?;
+                reflink_or_copy(path, &backup_file)?;
                 receipt.backup_paths.push(backup_file);
 
                 // Apply simple line patch or store patch payload
@@ -167,7 +194,7 @@ impl ResourceManager for FsAdapter {
 
             // Write atomically via temporary sibling file
             let tmp_sibling = target_path.with_extension("tmp_commit");
-            fs::copy(&staged_file, &tmp_sibling)?;
+            reflink_or_copy(&staged_file, &tmp_sibling)?;
             fs::rename(&tmp_sibling, &target_path)?;
         }
 
@@ -183,7 +210,7 @@ impl ResourceManager for FsAdapter {
                 let target_path = PathBuf::from(target_str);
                 for backup in &r.backup_paths {
                     if backup.exists() {
-                        let _ = fs::copy(backup, &target_path);
+                        let _ = reflink_or_copy(backup, &target_path);
                     }
                 }
             }

@@ -334,3 +334,19 @@ fn test_parallel_prepare_with_short_circuit_abort() {
     let final_status = coord.get_status(&tid).unwrap();
     assert_eq!(final_status.state, TxState::Aborted);
 }
+
+#[test]
+fn test_reflink_or_copy_snapshot_staging() {
+    let tmp = tempdir().unwrap();
+    let src_file = tmp.path().join("source.txt");
+    let clone_file = tmp.path().join("clone.txt");
+
+    fs::write(&src_file, "Reflink zero-copy test payload").unwrap();
+    agent_2pc::adapters::reflink_or_copy(&src_file, &clone_file).unwrap();
+
+    assert!(clone_file.exists());
+    assert_eq!(
+        fs::read_to_string(&clone_file).unwrap(),
+        "Reflink zero-copy test payload"
+    );
+}
