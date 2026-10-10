@@ -1,0 +1,37 @@
+{
+  "timeout_ms": 30000,
+  "steps": [
+    {
+      "participant_id": "fs_backend_auth",
+      "intent": {
+        "type": "fs_write",
+        "path": "src/auth/jwt.rs",
+        "content": "// JWT Authentication Middleware\npub fn verify_token() -> bool { true }\n",
+        "create_dirs": true
+      }
+    },
+    {
+      "participant_id": "cmd_syntax_check",
+      "intent": {
+        "type": "command",
+        "command": "echo 'asserting syntax invariants... ok'",
+        "working_dir": ".",
+        "env": {}
+      }
+    },
+    {
+      "participant_id": "api_linear_reserve",
+      "intent": {
+        "type": "rest_api",
+        "endpoint": "https://api.linear.app/graphql",
+        "method": "POST",
+        "headers": {},
+        "body": "{\"query\": \"mutation { issueUpdate(id: \\\"DEV-101\\\", input: { stateId: \\\"in_progress\\\" }) }\"}",
+        "idempotency_key": "tx-lease-sample-101",
+        "compensation_endpoint": "https://api.linear.app/graphql",
+        "compensation_method": "POST",
+        "compensation_body": "{\"query\": \"mutation { issueUpdate(id: \\\"DEV-101\\\", input: { stateId: \\\"todo\\\" }) }\"}"
+      }
+    }
+  ]
+}
