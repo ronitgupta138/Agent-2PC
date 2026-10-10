@@ -84,7 +84,7 @@ impl ResourceManager for SandboxAdapter {
                 }
 
                 let output = match bwrap_res {
-                    Some(out) if out.status.success() || !out.stderr.is_empty() => out,
+                    Some(out) if out.status.success() => out,
                     _ => {
                         // Fallback to unshare with UID mapping
                         let unshare_attempt = Command::new("unshare")
