@@ -394,3 +394,19 @@ fn test_optimistic_concurrency_conflict_detection() {
     let status = coord.get_status(&tid).unwrap();
     assert_eq!(status.state, TxState::Aborting);
 }
+
+#[test]
+fn test_monitor_stats_collection() {
+    let tmp = tempdir().unwrap();
+    let tx_dir = tmp.path().join(".agent-tx");
+
+    let mut coord = Coordinator::new(&tx_dir).unwrap();
+    let tid = coord.begin(Some(20_000)).unwrap();
+
+    let monitor = agent_2pc::monitor::Monitor::new(&tx_dir);
+    let stats = monitor.collect_stats().unwrap();
+
+    assert_eq!(stats.active_count, 1);
+    assert_eq!(stats.active_transactions[0].tid, tid.to_string());
+    assert!(stats.health_status.contains("HEALTHY"));
+}

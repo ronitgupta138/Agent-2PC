@@ -178,6 +178,9 @@ enum Commands {
         #[arg(long)]
         path: PathBuf,
     },
+
+    /// Display terminal live monitor and transaction HUD
+    Monitor,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -738,6 +741,16 @@ fn run_cli(cli: Cli) -> Result<(), TxError> {
                     path.display().to_string().bold(),
                     hash
                 );
+            }
+        }
+
+        Commands::Monitor => {
+            let monitor = agent_2pc::monitor::Monitor::new(tx_dir);
+            if cli.json {
+                let stats = monitor.collect_stats()?;
+                println!("{}", serde_json::to_string_pretty(&stats)?);
+            } else {
+                monitor.render_terminal()?;
             }
         }
     }

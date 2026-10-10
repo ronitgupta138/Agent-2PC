@@ -5,3 +5,4 @@ pub mod wal;
 pub mod adapters;
 pub mod coordinator;
 pub mod mcp;
+pub mod monitor;
