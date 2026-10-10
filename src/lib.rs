@@ -6,3 +6,4 @@ pub mod adapters;
 pub mod coordinator;
 pub mod mcp;
 pub mod monitor;
+pub mod sandbox;

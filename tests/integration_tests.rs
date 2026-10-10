@@ -410,3 +410,30 @@ fn test_monitor_stats_collection() {
     assert_eq!(stats.active_transactions[0].tid, tid.to_string());
     assert!(stats.health_status.contains("HEALTHY"));
 }
+
+#[test]
+fn test_sandbox_adapter_filesystem_protection() {
+    let tmp = tempdir().unwrap();
+    let tx_dir = tmp.path().join(".agent-tx");
+
+    let mut coord = Coordinator::new(&tx_dir).unwrap();
+    let tid = coord.begin(Some(30_000)).unwrap();
+
+    let mut sandbox = agent_2pc::sandbox::SandboxAdapter::new("sandbox_guard");
+
+    // 1. Benign command inside tmp working directory succeeds
+    let vote = coord
+        .prepare_participant(
+            &tid,
+            &mut sandbox,
+            ResourceIntent::SandboxCommand {
+                command: "echo 'sandbox operational'".into(),
+                working_dir: tmp.path().to_path_buf(),
+                writable_paths: vec![tmp.path().to_path_buf()],
+                env: HashMap::new(),
+            },
+        )
+        .unwrap();
+
+    assert!(matches!(vote, ParticipantVote::Prepared(_)));
+}

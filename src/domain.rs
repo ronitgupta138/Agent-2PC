@@ -148,6 +148,13 @@ pub enum ResourceIntent {
         working_dir: PathBuf,
         env: HashMap<String, String>,
     },
+    /// Hardened Linux unprivileged user-namespace sandboxed execution.
+    SandboxCommand {
+        command: String,
+        working_dir: PathBuf,
+        writable_paths: Vec<PathBuf>,
+        env: HashMap<String, String>,
+    },
     /// External REST API call with idempotency lease & compensation endpoint.
     RestApi {
         endpoint: String,
