@@ -164,6 +164,9 @@ enum Commands {
         #[arg(long)]
         file: PathBuf,
     },
+
+    /// Run native Model Context Protocol (MCP) JSON-RPC 2.0 stdio server
+    Mcp,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -694,6 +697,13 @@ fn run_cli(cli: Cli) -> Result<(), TxError> {
                     "✔ 2PC ROLLBACK:".yellow().bold()
                 );
             }
+        }
+
+        Commands::Mcp => {
+            let mcp = agent_2pc::mcp::McpServer::new(tx_dir);
+            let stdin = std::io::stdin();
+            let stdout = std::io::stdout();
+            mcp.run_loop(stdin.lock(), stdout.lock())?;
         }
     }
 

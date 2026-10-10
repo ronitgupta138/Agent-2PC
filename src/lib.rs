@@ -4,3 +4,4 @@ pub mod domain;
 pub mod wal;
 pub mod adapters;
 pub mod coordinator;
+pub mod mcp;
