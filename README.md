@@ -12,10 +12,10 @@
 ### **Two-Phase Commit & Compensating Journaling Engine for AI Agent Tool Execution**
 
 [![GitHub Stars](https://img.shields.io/github/stars/ronitgupta138/agent-2pc?style=flat-square&color=0891b2&labelColor=0a0b0e)](https://github.com/ronitgupta138/agent-2pc/stargazers)
-[![Crates.io](https://img.shields.io/badge/crates.io-v0.5.0-0891b2?style=flat-square&labelColor=0a0b0e)](https://crates.io/crates/agent-2pc)
+[![Crates.io](https://img.shields.io/badge/crates.io-v0.6.0-0891b2?style=flat-square&labelColor=0a0b0e)](https://crates.io/crates/agent-2pc)
 [![License: MIT](https://img.shields.io/badge/License-MIT-0891b2?style=flat-square&labelColor=0a0b0e)](LICENSE)
 [![Rust: 1.80+](https://img.shields.io/badge/Rust-1.80+-0891b2?style=flat-square&labelColor=0a0b0e)](https://www.rust-lang.org)
-[![Build Status](https://img.shields.io/badge/Tests-16%2F16%20Passing-0891b2?style=flat-square&labelColor=0a0b0e)](#-verification--test-suite)
+[![Build Status](https://img.shields.io/badge/Tests-18%2F18%20Passing-0891b2?style=flat-square&labelColor=0a0b0e)](#-verification--test-suite)
 [![Views](https://hits.sh/github.com/ronitgupta138/agent-2pc.svg?style=flat-square&label=Views&color=0891b2&labelColor=0a0b0e)](https://hits.sh/github.com/ronitgupta138/agent-2pc/)
 [![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa?style=flat-square&labelColor=0a0b0e)](https://github.com/sponsors/ronitgupta138)
 
@@ -116,6 +116,7 @@ Measured via `cargo test --test benchmark -- --nocapture`:
 | :--- | :--- | :--- | :--- | :--- |
 | **`FsAdapter`** | Filesystem | Stages new files in scratch memory; captures `.bak` snapshot if target exists. | Atomically renames staged file to destination; purges scratch. | Restores original from `.bak` snapshot; purges scratch directory. |
 | **`SandboxAdapter`** | Container Security | Runs commands inside unprivileged Linux user namespace & bubblewrap; mounts host read-only. | Promotes verified build artifacts from container workspace. | Kills container process hierarchy; purges ephemeral workspace. |
+| **`GovernorAdapter`** | Velocity Defense | Enforces sliding-window task/runtime limits; fires in-kernel `SIGSTOP` on fork/delete spikes. | Promotes verified command outputs cleanly. | Freezes and terminates rogue process group (`SIGKILL`); rolls back staging. |
 | **`CommandAdapter`** | Subprocesses | Executes command in isolated scratch directory; asserts exit code 0. | Promotes generated build artifacts to target paths. | Kills hanging processes; discards scratch outputs. |
 | **`ApiAdapter`** | External APIs | Allocates idempotency key; verifies payload schema & pre-auth. | Finalizes idempotency lease with remote server. | Calls registered compensation endpoint with rollback token. |
 | **`GitAdapter`** | Version Control| Verifies repository clean state; creates detached temporary ref. | Fast-forwards / commits changes into target branch. | Discards temporary ref without altering working tree. |
@@ -315,7 +316,7 @@ cargo test
 ```
 
 ```
-running 16 tests
+running 18 tests
 test test_reflink_or_copy_snapshot_staging ... ok
 test test_monitor_stats_collection ... ok
 test test_wal_framing_and_crc32_tamper_detection ... ok
@@ -324,8 +325,10 @@ test test_api_adapter_lease_and_compensation ... ok
 test test_crash_recovery_uncommitted_rollback ... ok
 test test_sandbox_adapter_filesystem_protection ... ok
 test test_2pc_partial_failure_deterministic_rollback ... ok
+test test_governor_adapter_clean_execution ... ok
 test test_2pc_all_prepared_atomic_commit ... ok
 test test_parallel_prepare_with_short_circuit_abort ... ok
+test test_governor_adapter_timeout_containment ... ok
 test test_mcp_initialize_and_tools_list ... ok
 test test_mcp_begin_stage_commit_flow ... ok
 test test_three_way_merge_non_overlapping_clean ... ok
@@ -333,7 +336,7 @@ test test_three_way_merge_overlapping_conflict ... ok
 test test_wal_append_latency_benchmark ... ok
 test test_end_to_end_2pc_transaction_throughput ... ok
 
-test result: ok. 16 passed; 0 failed; 0 ignored; finished in 1.78s
+test result: ok. 18 passed; 0 failed; 0 ignored; finished in 1.85s
 ```
 
 ---

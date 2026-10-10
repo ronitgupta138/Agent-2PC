@@ -155,6 +155,14 @@ pub enum ResourceIntent {
         writable_paths: Vec<PathBuf>,
         env: HashMap<String, String>,
     },
+    /// Governed execution with sliding-window velocity tripwires (fork-bomb, runaway loop defense).
+    GovernedCommand {
+        command: String,
+        working_dir: PathBuf,
+        max_forks: usize,
+        timeout_ms: u64,
+        env: HashMap<String, String>,
+    },
     /// External REST API call with idempotency lease & compensation endpoint.
     RestApi {
         endpoint: String,

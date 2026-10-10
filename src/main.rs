@@ -130,6 +130,29 @@ enum Commands {
         participant: Option<String>,
     },
 
+    /// Stage command with sliding-window velocity tripwires (GovernorAdapter)
+    StageGoverned {
+        /// Target transaction ID
+        #[arg(long)]
+        tid: String,
+
+        /// Command to execute
+        #[arg(long)]
+        command: String,
+
+        /// Maximum concurrent tasks/threads before tripwire fires (default: 30)
+        #[arg(long, default_value_t = 30)]
+        max_forks: usize,
+
+        /// Maximum runtime in milliseconds before freeze (default: 10000)
+        #[arg(long, default_value_t = 10_000)]
+        timeout_ms: u64,
+
+        /// Optional custom participant ID
+        #[arg(long)]
+        participant: Option<String>,
+    },
+
     /// Phase 2: Commit all staged changes atomically
     Commit {
         /// Target transaction ID
@@ -497,6 +520,63 @@ fn run_cli(cli: Cli) -> Result<(), TxError> {
                             "✔ PREPARED".green().bold(),
                             endpoint.cyan(),
                             key.yellow()
+                        );
+                    }
+                }
+                ParticipantVote::Aborted { reason } => {
+                    if cli.json {
+                        println!(
+                            "{}",
+                            serde_json::json!({
+                                "status": "error",
+                                "vote": "ABORTED",
+                                "reason": reason
+                            })
+                        );
+                    } else {
+                        println!("{} {}", "✖ ABORTED:".red().bold(), reason);
+                    }
+                }
+            }
+        }
+
+        Commands::StageGoverned {
+            tid,
+            command,
+            max_forks,
+            timeout_ms,
+            participant,
+        } => {
+            let mut coord = Coordinator::new(tx_dir)?;
+            let tid = TransactionId::parse(&tid)?;
+            let pid = participant.unwrap_or_else(|| "gov_exec".to_string());
+
+            let mut adapter = agent_2pc::governor::GovernorAdapter::new(pid);
+            let intent = ResourceIntent::GovernedCommand {
+                command: command.clone(),
+                working_dir: std::env::current_dir().unwrap_or_default(),
+                max_forks,
+                timeout_ms,
+                env: HashMap::new(),
+            };
+
+            let vote = coord.prepare_participant(&tid, &mut adapter, intent)?;
+            match vote {
+                ParticipantVote::Prepared(receipt) => {
+                    if cli.json {
+                        println!(
+                            "{}",
+                            serde_json::json!({
+                                "status": "ok",
+                                "vote": "PREPARED",
+                                "receipt": receipt
+                            })
+                        );
+                    } else {
+                        println!(
+                            "{} Governed execution `{}` passed velocity checks",
+                            "✔ PREPARED".green().bold(),
+                            command.cyan()
                         );
                     }
                 }

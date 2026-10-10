@@ -437,3 +437,61 @@ fn test_sandbox_adapter_filesystem_protection() {
 
     assert!(matches!(vote, ParticipantVote::Prepared(_)));
 }
+
+#[test]
+fn test_governor_adapter_timeout_containment() {
+    let tmp = tempdir().unwrap();
+    let tx_dir = tmp.path().join(".agent-tx");
+
+    let mut coord = Coordinator::new(&tx_dir).unwrap();
+    let tid = coord.begin(Some(30_000)).unwrap();
+
+    let mut gov = agent_2pc::governor::GovernorAdapter::new("gov_guard");
+
+    // Command tries to sleep 5 seconds, but governor enforces strict 100ms velocity limit
+    let vote = coord
+        .prepare_participant(
+            &tid,
+            &mut gov,
+            ResourceIntent::GovernedCommand {
+                command: "sleep 5".into(),
+                working_dir: tmp.path().to_path_buf(),
+                max_forks: 20,
+                timeout_ms: 100, // 100ms limit
+                env: HashMap::new(),
+            },
+        )
+        .unwrap();
+
+    assert!(matches!(vote, ParticipantVote::Aborted { .. }));
+    if let ParticipantVote::Aborted { reason } = vote {
+        assert!(reason.contains("Velocity Governor Tripped"));
+    }
+}
+
+#[test]
+fn test_governor_adapter_clean_execution() {
+    let tmp = tempdir().unwrap();
+    let tx_dir = tmp.path().join(".agent-tx");
+
+    let mut coord = Coordinator::new(&tx_dir).unwrap();
+    let tid = coord.begin(Some(30_000)).unwrap();
+
+    let mut gov = agent_2pc::governor::GovernorAdapter::new("gov_safe");
+
+    let vote = coord
+        .prepare_participant(
+            &tid,
+            &mut gov,
+            ResourceIntent::GovernedCommand {
+                command: "echo 'safe speed'".into(),
+                working_dir: tmp.path().to_path_buf(),
+                max_forks: 50,
+                timeout_ms: 5000,
+                env: HashMap::new(),
+            },
+        )
+        .unwrap();
+
+    assert!(matches!(vote, ParticipantVote::Prepared(_)));
+}
