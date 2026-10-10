@@ -148,6 +148,25 @@ agent-2pc stage-cmd --tid "$TID" --command "cargo check"
 agent-2pc commit --tid "$TID"
 ```
 
+### 3. Full CLI Command Palette
+
+| Subcommand | Description | Primary Use Case |
+| :--- | :--- | :--- |
+| `agent-2pc init` | Initialize `.agent-tx` workspace | Run once per repository root |
+| `agent-2pc begin` | Open new transaction & return TID | Start of agent turn |
+| `agent-2pc record-read` | Fingerprint file for OCC conflict detection | Before analyzing/reading code |
+| `agent-2pc stage-write` | Stage file content with `.bak` snapshot | File creations & modifications |
+| `agent-2pc stage-patch` | Stage unified diff in scratch memory | Targeted patch operations |
+| `agent-2pc stage-cmd` | Verify command in staging directory | Linters, test suites, migrations |
+| `agent-2pc stage-api` | Lease API idempotency token & compensation | Linear/GitHub/Slack mutations |
+| `agent-2pc commit` | Atomically materialize all staged actions | All steps verified successfully |
+| `agent-2pc abort` | Deterministically roll back staged changes | Step failure or invariant violation |
+| `agent-2pc merge` | Three-way non-overlapping reconciliation | Concurrent agent edits |
+| `agent-2pc top` / `monitor` | Live HUD (`--watch` for continuous auto-refresh)| Real-time developer observability |
+| `agent-2pc recover` | Scan WAL and resolve uncommitted crashes | Post-crash startup recovery |
+| `agent-2pc mcp` | Zero-dependency JSON-RPC 2.0 stdio server | Claude Desktop, Cursor, Hermes |
+| `agent-2pc run-batch` | One-shot atomic execution from JSON manifest | Scripted multi-step workflows |
+
 ---
 
 ## 🤖 AI Agent & MCP (Model Context Protocol) Integration
