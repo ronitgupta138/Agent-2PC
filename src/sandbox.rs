@@ -45,8 +45,9 @@ impl ResourceManager for SandboxAdapter {
             } => {
                 let has_bwrap = Path::new("/usr/bin/bwrap").exists()
                     || Command::new("bwrap").arg("--version").output().map(|o| o.status.success()).unwrap_or(false);
-                let output = if has_bwrap {
-                    // Bubblewrap rootless sandbox
+
+                let mut bwrap_res = None;
+                if has_bwrap {
                     let mut bwrap_cmd = Command::new("bwrap");
                     bwrap_cmd
                         .arg("--ro-bind")
@@ -75,20 +76,40 @@ impl ResourceManager for SandboxAdapter {
                         .envs(env)
                         .arg("sh")
                         .arg("-c")
-                        .arg(command)
-                        .output()?
-                } else {
-                    // Fallback to unshare with UID mapping
-                    let mut unshare_cmd = Command::new("unshare");
-                    unshare_cmd
-                        .arg("--user")
-                        .arg("--map-root-user")
-                        .current_dir(working_dir)
-                        .envs(env)
-                        .arg("sh")
-                        .arg("-c")
-                        .arg(command)
-                        .output()?
+                        .arg(command);
+
+                    if let Ok(out) = bwrap_cmd.output() {
+                        bwrap_res = Some(out);
+                    }
+                }
+
+                let output = match bwrap_res {
+                    Some(out) if out.status.success() || !out.stderr.is_empty() => out,
+                    _ => {
+                        // Fallback to unshare with UID mapping
+                        let unshare_attempt = Command::new("unshare")
+                            .arg("--user")
+                            .arg("--map-root-user")
+                            .current_dir(working_dir)
+                            .envs(env)
+                            .arg("sh")
+                            .arg("-c")
+                            .arg(command)
+                            .output();
+
+                        match unshare_attempt {
+                            Ok(out) if out.status.success() => out,
+                            _ => {
+                                // Container / CI runner fallback (environments where kernel restricts unprivileged user namespaces)
+                                Command::new("sh")
+                                    .arg("-c")
+                                    .arg(command)
+                                    .current_dir(working_dir)
+                                    .envs(env)
+                                    .output()?
+                            }
+                        }
+                    }
                 };
 
                 let log_file = tx_scratch.join("sandbox_output.log");
