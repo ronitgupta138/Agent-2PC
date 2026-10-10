@@ -227,6 +227,18 @@ impl McpServer {
                         "tid": { "type": "string", "description": "Optional specific Transaction ID" }
                     }
                 }
+            }),
+            json!({
+                "name": "agent_2pc_record_read",
+                "description": "Record a file in read-set for optimistic concurrency control (OCC). Fails prepare if modified concurrently.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "tid": { "type": "string", "description": "Active Transaction ID" },
+                        "path": { "type": "string", "description": "Path to file read" }
+                    },
+                    "required": ["tid", "path"]
+                }
             })
         ]
     }
@@ -479,6 +491,24 @@ impl McpServer {
                         .collect();
                     Ok(json!(list))
                 }
+            }
+
+            "agent_2pc_record_read" => {
+                let tid_str = args.get("tid").and_then(|v| v.as_str()).ok_or_else(|| {
+                    TxError::Other("Missing required argument: tid".into())
+                })?;
+                let path_str = args.get("path").and_then(|v| v.as_str()).ok_or_else(|| {
+                    TxError::Other("Missing required argument: path".into())
+                })?;
+
+                let tid = TransactionId::parse(tid_str)?;
+                let hash = coord.record_read(&tid, path_str)?;
+                Ok(json!({
+                    "status": "ok",
+                    "tid": tid.to_string(),
+                    "path": path_str,
+                    "hash": format!("0x{:08x}", hash)
+                }))
             }
 
             unknown => Err(TxError::Other(format!("Unknown tool: {}", unknown))),

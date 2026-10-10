@@ -350,3 +350,47 @@ fn test_reflink_or_copy_snapshot_staging() {
         "Reflink zero-copy test payload"
     );
 }
+
+#[test]
+fn test_optimistic_concurrency_conflict_detection() {
+    let tmp = tempdir().unwrap();
+    let tx_dir = tmp.path().join(".agent-tx");
+    let shared_file = tmp.path().join("schema.sql");
+
+    // 1. Initial shared file state
+    fs::write(&shared_file, "CREATE TABLE orders;").unwrap();
+
+    let mut coord = Coordinator::new(&tx_dir).unwrap();
+    let tid = coord.begin(Some(30_000)).unwrap();
+
+    // 2. Agent records read of shared_file (OCC read-set fingerprint)
+    let initial_hash = coord.record_read(&tid, &shared_file).unwrap();
+    assert_ne!(initial_hash, 0);
+
+    // 3. Concurrent process modifies shared_file behind the agent's back!
+    fs::write(&shared_file, "CREATE TABLE orders_concurrently_mutated;").unwrap();
+
+    // 4. Agent attempts to prepare file update
+    let mut fs_adapter = FsAdapter::new("fs_agent_orders");
+    let vote = coord
+        .prepare_participant(
+            &tid,
+            &mut fs_adapter,
+            ResourceIntent::FsWrite {
+                path: shared_file.clone(),
+                content: "CREATE TABLE orders_agent_staged;".into(),
+                create_dirs: false,
+            },
+        )
+        .unwrap();
+
+    // 5. Must vote ABORT due to conflict detection!
+    assert!(matches!(vote, ParticipantVote::Aborted { .. }));
+    if let ParticipantVote::Aborted { reason } = vote {
+        assert!(reason.contains("Conflict detected"));
+    }
+
+    // Status must be Aborting / Aborted
+    let status = coord.get_status(&tid).unwrap();
+    assert_eq!(status.state, TxState::Aborting);
+}

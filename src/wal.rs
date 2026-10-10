@@ -27,6 +27,12 @@ pub enum WalPayload {
         participant_id: ParticipantId,
         intent: ResourceIntent,
     },
+    /// Read-set fingerprint for optimistic concurrency conflict detection
+    ReadSet {
+        tid: TransactionId,
+        path: PathBuf,
+        hash: u32,
+    },
     /// Participant voted PREPARED
     Prepared {
         tid: TransactionId,

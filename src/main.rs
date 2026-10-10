@@ -167,6 +167,17 @@ enum Commands {
 
     /// Run native Model Context Protocol (MCP) JSON-RPC 2.0 stdio server
     Mcp,
+
+    /// Record a file in the transaction's read-set for optimistic concurrency conflict detection
+    RecordRead {
+        /// Target transaction ID
+        #[arg(long)]
+        tid: String,
+
+        /// Path to the read file
+        #[arg(long)]
+        path: PathBuf,
+    },
 }
 
 #[derive(Serialize, Deserialize)]
@@ -704,6 +715,30 @@ fn run_cli(cli: Cli) -> Result<(), TxError> {
             let stdin = std::io::stdin();
             let stdout = std::io::stdout();
             mcp.run_loop(stdin.lock(), stdout.lock())?;
+        }
+
+        Commands::RecordRead { tid, path } => {
+            let mut coord = Coordinator::new(tx_dir)?;
+            let tid = TransactionId::parse(&tid)?;
+            let hash = coord.record_read(&tid, &path)?;
+            if cli.json {
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "status": "ok",
+                        "tid": tid.to_string(),
+                        "path": path.display().to_string(),
+                        "hash": format!("0x{:08x}", hash)
+                    })
+                );
+            } else {
+                println!(
+                    "{} Recorded read-set invariant for {} (hash: 0x{:08x})",
+                    "✔".green().bold(),
+                    path.display().to_string().bold(),
+                    hash
+                );
+            }
         }
     }
 

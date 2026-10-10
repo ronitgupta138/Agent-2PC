@@ -22,6 +22,7 @@ pub struct ActiveTx {
     pub timeout_ms: u64,
     pub participants: Vec<ParticipantId>,
     pub receipts: HashMap<ParticipantId, StageReceipt>,
+    pub read_set: HashMap<PathBuf, u32>,
     pub abort_reason: Option<String>,
 }
 
@@ -88,9 +89,15 @@ impl Coordinator {
                             timeout_ms,
                             participants: Vec::new(),
                             receipts: HashMap::new(),
+                            read_set: HashMap::new(),
                             abort_reason: None,
                         },
                     );
+                }
+                WalPayload::ReadSet { tid, path, hash } => {
+                    if let Some(tx) = self.transactions.get_mut(&tid) {
+                        tx.read_set.insert(path, hash);
+                    }
                 }
                 WalPayload::Enlist {
                     tid,
@@ -179,11 +186,70 @@ impl Coordinator {
                 timeout_ms: timeout,
                 participants: Vec::new(),
                 receipts: HashMap::new(),
+                read_set: HashMap::new(),
                 abort_reason: None,
             },
         );
 
         Ok(tid)
+    }
+
+    /// Record a file in the transaction's read-set for optimistic concurrency conflict detection.
+    pub fn record_read(
+        &mut self,
+        tid: &TransactionId,
+        path: impl AsRef<Path>,
+    ) -> Result<u32, TxError> {
+        let path = path.as_ref().to_path_buf();
+        let bytes = fs::read(&path)?;
+        let mut hasher = crc32fast::Hasher::new();
+        hasher.update(&bytes);
+        let hash = hasher.finalize();
+
+        self.wal.append(&WalPayload::ReadSet {
+            tid: *tid,
+            path: path.clone(),
+            hash,
+        })?;
+
+        let tx = self
+            .transactions
+            .get_mut(tid)
+            .ok_or(TxError::TransactionNotFound(*tid))?;
+        tx.read_set.insert(path, hash);
+
+        Ok(hash)
+    }
+
+    /// Validate that all files in read-set have not been modified concurrently.
+    pub fn validate_read_set(&self, tid: &TransactionId) -> Result<(), TxError> {
+        let tx = self
+            .transactions
+            .get(tid)
+            .ok_or(TxError::TransactionNotFound(*tid))?;
+
+        for (path, &expected_hash) in &tx.read_set {
+            if !path.exists() {
+                return Err(TxError::Other(format!(
+                    "Conflict detected: file {} was deleted during transaction",
+                    path.display()
+                )));
+            }
+            let bytes = fs::read(path)?;
+            let mut hasher = crc32fast::Hasher::new();
+            hasher.update(&bytes);
+            let current_hash = hasher.finalize();
+
+            if current_hash != expected_hash {
+                return Err(TxError::Other(format!(
+                    "Conflict detected: file {} was modified concurrently (expected hash 0x{:08x}, got 0x{:08x})",
+                    path.display(),
+                    expected_hash,
+                    current_hash
+                )));
+            }
+        }
+        Ok(())
     }
 
     /// Enlist a participant and execute Phase 1 (PREPARE).
@@ -218,6 +284,21 @@ impl Coordinator {
             participant_id: pid.clone(),
             intent: intent.clone(),
         })?;
+
+        // Validate Optimistic Concurrency Read-Set invariants
+        if let Err(e) = self.validate_read_set(tid) {
+            let reason = e.to_string();
+            self.wal.append(&WalPayload::VoteAbort {
+                tid: *tid,
+                participant_id: pid,
+                reason: reason.clone(),
+            })?;
+            if let Some(t) = self.transactions.get_mut(tid) {
+                t.state = TxState::Aborting;
+                t.abort_reason = Some(reason.clone());
+            }
+            return Ok(ParticipantVote::Aborted { reason });
+        }
 
         // Execute Prepare
         let vote = resource.prepare(tid, &intent, &self.scratch_dir)?;
