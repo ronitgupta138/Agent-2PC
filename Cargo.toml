@@ -1,0 +1,30 @@
+[package]
+name = "agent-2pc"
+version = "0.1.0"
+edition = "2024"
+authors = ["Ronit Gupta <ronitgupta138@gmail.com>"]
+description = "Heterogeneous Two-Phase Commit (2PC) & Compensating Journaling Engine for AI Agent Tool Execution"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/ronitgupta138/agent-2pc"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive", "env"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+crc32fast = "1.4"
+uuid = { version = "1.10", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "2.0"
+anyhow = "1.0"
+tempfile = "3.13"
+walkdir = "2.5"
+colored = "2.1"
+
+[[bin]]
+name = "agent-2pc"
+path = "src/main.rs"
+
+[lib]
+name = "agent_2pc"
+path = "src/lib.rs"
