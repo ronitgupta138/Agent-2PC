@@ -153,6 +153,29 @@ enum Commands {
         participant: Option<String>,
     },
 
+    /// Stage command execution inside hardware-isolated MicroVM boundary (MicrovmAdapter)
+    StageVm {
+        /// Target transaction ID
+        #[arg(long)]
+        tid: String,
+
+        /// Command to execute
+        #[arg(long)]
+        command: String,
+
+        /// Virtual CPUs allocated (default: 1)
+        #[arg(long, default_value_t = 1)]
+        vcpus: u8,
+
+        /// Memory limit in Megabytes (default: 256)
+        #[arg(long, default_value_t = 256)]
+        memory_mb: u32,
+
+        /// Optional custom participant ID
+        #[arg(long)]
+        participant: Option<String>,
+    },
+
     /// Phase 2: Commit all staged changes atomically
     Commit {
         /// Target transaction ID
@@ -575,6 +598,63 @@ fn run_cli(cli: Cli) -> Result<(), TxError> {
                     } else {
                         println!(
                             "{} Governed execution `{}` passed velocity checks",
+                            "✔ PREPARED".green().bold(),
+                            command.cyan()
+                        );
+                    }
+                }
+                ParticipantVote::Aborted { reason } => {
+                    if cli.json {
+                        println!(
+                            "{}",
+                            serde_json::json!({
+                                "status": "error",
+                                "vote": "ABORTED",
+                                "reason": reason
+                            })
+                        );
+                    } else {
+                        println!("{} {}", "✖ ABORTED:".red().bold(), reason);
+                    }
+                }
+            }
+        }
+
+        Commands::StageVm {
+            tid,
+            command,
+            vcpus,
+            memory_mb,
+            participant,
+        } => {
+            let mut coord = Coordinator::new(tx_dir)?;
+            let tid = TransactionId::parse(&tid)?;
+            let pid = participant.unwrap_or_else(|| "vm_exec".to_string());
+
+            let mut adapter = agent_2pc::microvm::MicrovmAdapter::new(pid);
+            let intent = ResourceIntent::MicrovmCommand {
+                command: command.clone(),
+                working_dir: std::env::current_dir().unwrap_or_default(),
+                vcpus,
+                memory_mb,
+                env: HashMap::new(),
+            };
+
+            let vote = coord.prepare_participant(&tid, &mut adapter, intent)?;
+            match vote {
+                ParticipantVote::Prepared(receipt) => {
+                    if cli.json {
+                        println!(
+                            "{}",
+                            serde_json::json!({
+                                "status": "ok",
+                                "vote": "PREPARED",
+                                "receipt": receipt
+                            })
+                        );
+                    } else {
+                        println!(
+                            "{} MicroVM execution `{}` prepared inside isolated boundary",
                             "✔ PREPARED".green().bold(),
                             command.cyan()
                         );

@@ -163,6 +163,14 @@ pub enum ResourceIntent {
         timeout_ms: u64,
         env: HashMap<String, String>,
     },
+    /// Hardware-isolated MicroVM ephemeral container execution.
+    MicrovmCommand {
+        command: String,
+        working_dir: PathBuf,
+        vcpus: u8,
+        memory_mb: u32,
+        env: HashMap<String, String>,
+    },
     /// External REST API call with idempotency lease & compensation endpoint.
     RestApi {
         endpoint: String,

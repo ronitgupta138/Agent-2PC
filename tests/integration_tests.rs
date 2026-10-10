@@ -495,3 +495,33 @@ fn test_governor_adapter_clean_execution() {
 
     assert!(matches!(vote, ParticipantVote::Prepared(_)));
 }
+
+#[test]
+fn test_microvm_adapter_execution() {
+    let tmp = tempdir().unwrap();
+    let tx_dir = tmp.path().join(".agent-tx");
+
+    let mut coord = Coordinator::new(&tx_dir).unwrap();
+    let tid = coord.begin(Some(30_000)).unwrap();
+
+    let mut vm = agent_2pc::microvm::MicrovmAdapter::new("vm_runner");
+
+    let vote = coord
+        .prepare_participant(
+            &tid,
+            &mut vm,
+            ResourceIntent::MicrovmCommand {
+                command: "echo 'microvm hardware boundary active'".into(),
+                working_dir: tmp.path().to_path_buf(),
+                vcpus: 1,
+                memory_mb: 128,
+                env: HashMap::new(),
+            },
+        )
+        .unwrap();
+
+    assert!(matches!(vote, ParticipantVote::Prepared(_)));
+    if let ParticipantVote::Prepared(receipt) = vote {
+        assert_eq!(receipt.metadata.get("memory_mb"), Some(&"128".to_string()));
+    }
+}
