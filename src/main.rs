@@ -179,8 +179,17 @@ enum Commands {
         path: PathBuf,
     },
 
-    /// Display terminal live monitor and transaction HUD
-    Monitor,
+    /// Display terminal live monitor and transaction HUD (alias: `top`)
+    #[command(alias = "top")]
+    Monitor {
+        /// Continuously refresh and monitor in real-time
+        #[arg(long, short)]
+        watch: bool,
+
+        /// Refresh interval in milliseconds (default: 1000)
+        #[arg(long, default_value_t = 1000)]
+        interval_ms: u64,
+    },
 
     /// Perform 3-way semantic file merge for concurrent agent reconciliation
     Merge {
@@ -763,11 +772,13 @@ fn run_cli(cli: Cli) -> Result<(), TxError> {
             }
         }
 
-        Commands::Monitor => {
+        Commands::Monitor { watch, interval_ms } => {
             let monitor = agent_2pc::monitor::Monitor::new(tx_dir);
             if cli.json {
                 let stats = monitor.collect_stats()?;
                 println!("{}", serde_json::to_string_pretty(&stats)?);
+            } else if watch {
+                monitor.watch_loop(interval_ms)?;
             } else {
                 monitor.render_terminal()?;
             }

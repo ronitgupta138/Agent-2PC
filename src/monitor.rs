@@ -193,6 +193,16 @@ impl Monitor {
 
         Ok(())
     }
+
+    /// Run live auto-refreshing terminal HUD loop.
+    pub fn watch_loop(&self, interval_ms: u64) -> Result<(), crate::domain::TxError> {
+        loop {
+            print!("\x1B[2J\x1B[H");
+            self.render_terminal()?;
+            println!("{}", "  Press Ctrl+C to exit live monitor...".dimmed());
+            std::thread::sleep(std::time::Duration::from_millis(interval_ms));
+        }
+    }
 }
 
 fn get_dir_size(path: &Path) -> u64 {
