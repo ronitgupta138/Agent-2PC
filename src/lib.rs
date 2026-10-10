@@ -9,3 +9,4 @@ pub mod monitor;
 pub mod sandbox;
 pub mod merge;
 pub mod governor;
+pub mod crdt;
