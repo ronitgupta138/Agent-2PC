@@ -12,7 +12,7 @@
 ### **Two-Phase Commit & Compensating Journaling Engine for AI Agent Tool Execution**
 
 [![GitHub Stars](https://img.shields.io/github/stars/ronitgupta138/agent-2pc?style=flat-square&color=0891b2&labelColor=0a0b0e)](https://github.com/ronitgupta138/agent-2pc/stargazers)
-[![Crates.io](https://img.shields.io/badge/crates.io-v0.9.0-0891b2?style=flat-square&labelColor=0a0b0e)](https://crates.io/crates/agent-2pc)
+[![Crates.io](https://img.shields.io/badge/crates.io-v1.0.0-0891b2?style=flat-square&labelColor=0a0b0e)](https://crates.io/crates/agent-2pc)
 [![License: MIT](https://img.shields.io/badge/License-MIT-0891b2?style=flat-square&labelColor=0a0b0e)](LICENSE)
 [![Rust: 1.80+](https://img.shields.io/badge/Rust-1.80+-0891b2?style=flat-square&labelColor=0a0b0e)](https://www.rust-lang.org)
 [![Build Status](https://img.shields.io/badge/Tests-24%2F24%20Passing-0891b2?style=flat-square&labelColor=0a0b0e)](#-verification--test-suite)
@@ -286,6 +286,34 @@ agent-2pc run-batch --file manifest.json
 ```
 
 If `cmd_test` fails, `src/routes/user.rs` is discarded instantly before touching the repository.
+
+---
+
+## 💻 Client SDKs (Python & TypeScript)
+
+### Python SDK (`agent-2pc`)
+```python
+from agent_2pc import Agent2PC
+
+tx_client = Agent2PC()
+
+# Automatic transactional context: commits on clean exit, rolls back on exception
+with tx_client.transaction(timeout_ms=30000) as session:
+    session.stage_write("src/auth.py", "def authenticate(): return True")
+    session.stage_cmd("pytest tests/test_auth.py")
+```
+
+### TypeScript SDK (`agent-2pc`)
+```typescript
+import { Agent2PC } from "agent-2pc";
+
+const client = new Agent2PC();
+const session = await client.begin({ timeoutMs: 30000 });
+
+await session.stageWrite("src/routes.ts", "// Route Handlers");
+await session.stageCommand("npm run test");
+await session.commit();
+```
 
 ---
 

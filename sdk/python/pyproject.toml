@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-2pc"
+version = "1.0.0"
+authors = [
+  { name = "Ronit Gupta", email = "ronitgupta138@gmail.com" },
+]
+description = "Two-Phase Commit (2PC) & Compensating Journaling Engine for AI Agent Tool Execution"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Software Development :: Libraries",
+]
