@@ -179,7 +179,7 @@ impl ResourceManager for FsAdapter {
             let mut original = fs::read_to_string(&target_path)?;
 
             // Naive patch replacement or line appends
-            original.push_str("\n");
+            original.push('\n');
             original.push_str(&patch_content);
             fs::write(&target_path, original)?;
         } else {
@@ -216,10 +216,9 @@ impl ResourceManager for FsAdapter {
             }
 
             // Remove staged directory
-            if let Some(stage_dir) = &r.stage_path {
-                if stage_dir.exists() {
+            if let Some(stage_dir) = &r.stage_path
+                && stage_dir.exists() {
                     let _ = fs::remove_dir_all(stage_dir);
-                }
             }
         }
         Ok(())
@@ -306,10 +305,9 @@ impl ResourceManager for CommandAdapter {
     }
 
     fn abort(&mut self, _tid: &TransactionId, receipt: Option<&StageReceipt>) -> Result<(), TxError> {
-        if let Some(r) = receipt {
-            if let Some(stage_dir) = &r.stage_path {
+        if let Some(r) = receipt
+            && let Some(stage_dir) = &r.stage_path {
                 let _ = fs::remove_dir_all(stage_dir);
-            }
         }
         Ok(())
     }
@@ -384,11 +382,10 @@ impl ResourceManager for ApiAdapter {
     }
 
     fn abort(&mut self, _tid: &TransactionId, receipt: Option<&StageReceipt>) -> Result<(), TxError> {
-        if let Some(r) = receipt {
-            if let Some(comp_ep) = r.metadata.get("compensation_endpoint") {
+        if let Some(r) = receipt
+            && let Some(comp_ep) = r.metadata.get("compensation_endpoint") {
                 // In production, invokes HTTP rollback with compensation_body & idempotency token
                 let _ = comp_ep;
-            }
         }
         Ok(())
     }

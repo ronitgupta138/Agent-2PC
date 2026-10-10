@@ -39,7 +39,7 @@ fn test_wal_framing_and_crc32_tamper_detection() {
 
     let records = WalScanner::read_all(&wal_path).unwrap();
     assert_eq!(records.len(), 2);
-    assert_eq!(records[0].crc32 != 0, true);
+    assert!(records[0].crc32 != 0);
 
     // Tamper with WAL file: flip a byte in the payload
     let mut raw_bytes = fs::read(&wal_path).unwrap();
@@ -232,7 +232,7 @@ fn test_crash_recovery_uncommitted_rollback() {
     let mut adapters: Vec<Box<dyn ResourceManager>> = vec![Box::new(FsAdapter::new("fs_schema"))];
     let report = new_coord.recover(&mut adapters[..]).unwrap();
 
-    assert_eq!(report.rolled_back.contains(&tid), true);
+    assert!(report.rolled_back.contains(&tid));
     assert_eq!(
         fs::read_to_string(&test_file).unwrap(),
         "CREATE TABLE users;"

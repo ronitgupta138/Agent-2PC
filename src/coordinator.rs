@@ -104,11 +104,10 @@ impl Coordinator {
                     participant_id,
                     ..
                 } => {
-                    if let Some(tx) = self.transactions.get_mut(&tid) {
-                        if !tx.participants.contains(&participant_id) {
+                    if let Some(tx) = self.transactions.get_mut(&tid)
+                        && !tx.participants.contains(&participant_id) {
                             tx.participants.push(participant_id);
                             tx.state = TxState::Preparing;
-                        }
                     }
                 }
                 WalPayload::Prepared {
@@ -430,10 +429,9 @@ impl Coordinator {
             final_votes.push(vote);
         }
 
-        if let Some(t) = self.transactions.get_mut(tid) {
-            if t.receipts.len() == t.participants.len() && t.state != TxState::Aborting {
+        if let Some(t) = self.transactions.get_mut(tid)
+            && t.receipts.len() == t.participants.len() && t.state != TxState::Aborting {
                 t.state = TxState::Prepared;
-            }
         }
 
         Ok(final_votes)
