@@ -12,10 +12,10 @@
 ### **Two-Phase Commit & Compensating Journaling Engine for AI Agent Tool Execution**
 
 [![GitHub Stars](https://img.shields.io/github/stars/ronitgupta138/agent-2pc?style=flat-square&color=0891b2&labelColor=0a0b0e)](https://github.com/ronitgupta138/agent-2pc/stargazers)
-[![Crates.io](https://img.shields.io/badge/crates.io-v0.8.0-0891b2?style=flat-square&labelColor=0a0b0e)](https://crates.io/crates/agent-2pc)
+[![Crates.io](https://img.shields.io/badge/crates.io-v0.9.0-0891b2?style=flat-square&labelColor=0a0b0e)](https://crates.io/crates/agent-2pc)
 [![License: MIT](https://img.shields.io/badge/License-MIT-0891b2?style=flat-square&labelColor=0a0b0e)](LICENSE)
 [![Rust: 1.80+](https://img.shields.io/badge/Rust-1.80+-0891b2?style=flat-square&labelColor=0a0b0e)](https://www.rust-lang.org)
-[![Build Status](https://img.shields.io/badge/Tests-22%2F22%20Passing-0891b2?style=flat-square&labelColor=0a0b0e)](#-verification--test-suite)
+[![Build Status](https://img.shields.io/badge/Tests-24%2F24%20Passing-0891b2?style=flat-square&labelColor=0a0b0e)](#-verification--test-suite)
 [![Views](https://hits.sh/github.com/ronitgupta138/agent-2pc.svg?style=flat-square&label=Views&color=0891b2&labelColor=0a0b0e)](https://hits.sh/github.com/ronitgupta138/agent-2pc/)
 [![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa?style=flat-square&labelColor=0a0b0e)](https://github.com/sponsors/ronitgupta138)
 
@@ -317,7 +317,7 @@ cargo test
 ```
 
 ```
-running 22 tests
+running 24 tests
 test test_reflink_or_copy_snapshot_staging ... ok
 test test_monitor_stats_collection ... ok
 test test_wal_framing_and_crc32_tamper_detection ... ok
@@ -338,10 +338,12 @@ test test_three_way_merge_overlapping_conflict ... ok
 test test_crdt_commutativity ... ok
 test test_crdt_deletion_tombstone ... ok
 test test_crdt_concurrent_insertion_convergence ... ok
+test test_distributed_consensus_all_prepared ... ok
+test test_distributed_consensus_peer_abort ... ok
 test test_wal_append_latency_benchmark ... ok
 test test_end_to_end_2pc_transaction_throughput ... ok
 
-test result: ok. 22 passed; 0 failed; 0 ignored; finished in 1.89s
+test result: ok. 24 passed; 0 failed; 0 ignored; finished in 1.91s
 ```
 
 ---
