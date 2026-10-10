@@ -1,15 +1,15 @@
 <div align="center">
 
-```
- ▄▄▄        ▄████  ▓█████  ███▄    █ ▄▄▄█████▓    ██████  ██▓███   ▄████▄  
-▒████▄     ██▒ ▀█▒ ▓█   ▀  ██ ▀█   █ ▓  ██▒ ▓▒  ▒██    ▒ ▓██░  ██▒▒██▀ ▀█  
-▒██  ▀█▄  ▒██░▄▄▄░ ▒███   ▓██  ▀█ ██▒▒ ▓██░ ▒░  ░ ▓██▄   ▓██░ ██▓▒▒▓█    ▄ 
-░██▄▄▄▄██ ░▓█  ██▓ ▒▓█  ▄ ▓██▒  ▐▌██▒░ ▓██▓ ░     ▒   ██▒▒██▄█▓▒ ▒▒▓▓▄ ▄██▒
- ▓█   ▓██▒░▒▓███▀▒ ░▒████▒▒██░   ▓██░  ▒██▒ ░   ▒██████▒▒▒██▒ ░  ░▒ ▓███▀ ░
- ▒▒   ▓▒█░ ░▒   ▒  ░░ ▒░ ░░ ▒░   ▒ ▒   ▒ ░░     ▒ ▒▓▒ ▒ ░▒▓▒░ ░  ░░ ░▒ ▒  ░
+```text
+ █████╗  ██████╗ ███████╗███╗   ██╗████████╗   ██████╗ ██████╗  ██████╗
+██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝   ╚════██╗██╔══██╗██╔════╝
+███████║██║  ███╗█████╗  ██╔██╗ ██║   ██║       █████╔╝██████╔╝██║     
+██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║      ██╔═══╝ ██╔═══╝ ██║     
+██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║      ███████╗██║     ╚██████╗
+╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝      ╚══════╝╚═╝      ╚═════╝
 ```
 
-### ⚡ Two-Phase Commit & Compensating Journaling Engine for AI Agent Tool Execution
+### **Two-Phase Commit & Compensating Journaling Engine for AI Agent Tool Execution**
 
 [![GitHub Stars](https://img.shields.io/github/stars/ronitgupta138/agent-2pc?style=flat-square&color=0891b2&labelColor=0a0b0e)](https://github.com/ronitgupta138/agent-2pc/stargazers)
 [![Crates.io](https://img.shields.io/badge/crates.io-v0.1.0-0891b2?style=flat-square&labelColor=0a0b0e)](https://crates.io/crates/agent-2pc)
@@ -19,8 +19,7 @@
 [![Views](https://hits.sh/github.com/ronitgupta138/agent-2pc.svg?style=flat-square&label=Views&color=0891b2&labelColor=0a0b0e)](https://hits.sh/github.com/ronitgupta138/agent-2pc/)
 [![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa?style=flat-square&labelColor=0a0b0e)](https://github.com/sponsors/ronitgupta138)
 
-**Zero dirty state. Zero broken syntax. Zero hallucinated rollbacks.**  
-A high-performance Rust coordinator that brings database ACID transactional finality to autonomous AI agents.
+*Engineered for autonomous coding agents, tool orchestrators, and developer harnesses. Bringing database ACID transactional finality to agent tool execution with zero dirty state, sub-2ms transaction latency, and deterministic crash recovery.*
 
 </div>
 
