@@ -279,3 +279,58 @@ fn test_api_adapter_lease_and_compensation() {
     let status = coord.get_status(&tid).unwrap();
     assert_eq!(status.state, TxState::Committed);
 }
+
+#[test]
+fn test_parallel_prepare_with_short_circuit_abort() {
+    let tmp = tempdir().unwrap();
+    let tx_dir = tmp.path().join(".agent-tx");
+    let test_file = tmp.path().join("parallel.txt");
+
+    let mut coord = Coordinator::new(&tx_dir).unwrap();
+    let tid = coord.begin(Some(30_000)).unwrap();
+
+    let mut items: Vec<(Box<dyn ResourceManager>, ResourceIntent)> = vec![
+        (
+            Box::new(FsAdapter::new("fs_parallel_1")),
+            ResourceIntent::FsWrite {
+                path: test_file.clone(),
+                content: "Parallel Write Success".into(),
+                create_dirs: false,
+            },
+        ),
+        (
+            Box::new(CommandAdapter::new("cmd_failing_parallel")),
+            ResourceIntent::Command {
+                command: "sh -c 'echo \"parallel failure\" >&2; exit 99'".into(),
+                working_dir: tmp.path().to_path_buf(),
+                env: HashMap::new(),
+            },
+        ),
+        (
+            Box::new(FsAdapter::new("fs_parallel_2")),
+            ResourceIntent::FsWrite {
+                path: tmp.path().join("parallel_2.txt"),
+                content: "Another file".into(),
+                create_dirs: false,
+            },
+        ),
+    ];
+
+    let votes = coord.prepare_batch_parallel(&tid, &mut items[..]).unwrap();
+    assert_eq!(votes.len(), 3);
+
+    // Verify at least one vote is Aborted
+    let any_aborted = votes.iter().any(|v| matches!(v, ParticipantVote::Aborted { .. }));
+    assert!(any_aborted);
+
+    // Attempting commit must fail and trigger rollback
+    let mut adapters: Vec<Box<dyn ResourceManager>> = items.into_iter().map(|(r, _)| r).collect();
+    let commit_res = coord.commit(&tid, &mut adapters[..]);
+    assert!(commit_res.is_err());
+
+    // File must NOT exist
+    assert!(!test_file.exists());
+
+    let final_status = coord.get_status(&tid).unwrap();
+    assert_eq!(final_status.state, TxState::Aborted);
+}

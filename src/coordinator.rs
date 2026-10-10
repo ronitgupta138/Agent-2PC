@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 /// In-memory state of an active transaction.
 #[derive(Debug, Clone)]
@@ -250,6 +252,110 @@ impl Coordinator {
         }
 
         Ok(vote)
+    }
+
+    /// Parallel Phase 1: Fan-out prepare to multiple resource managers concurrently with atomic short-circuit abort.
+    pub fn prepare_batch_parallel(
+        &mut self,
+        tid: &TransactionId,
+        items: &mut [(Box<dyn ResourceManager>, ResourceIntent)],
+    ) -> Result<Vec<ParticipantVote>, TxError> {
+        let tx = self
+            .transactions
+            .get_mut(tid)
+            .ok_or(TxError::TransactionNotFound(*tid))?;
+
+        if tx.state != TxState::Active && tx.state != TxState::Preparing && tx.state != TxState::Prepared {
+            return Err(TxError::InvalidState(
+                *tid,
+                tx.state,
+                "prepare_batch_parallel",
+            ));
+        }
+
+        // Register all participants in WAL and memory upfront
+        for (res, intent) in items.iter() {
+            let pid = res.id().clone();
+            if !tx.participants.contains(&pid) {
+                tx.participants.push(pid.clone());
+            }
+            self.wal.append(&WalPayload::Enlist {
+                tid: *tid,
+                participant_id: pid,
+                intent: intent.clone(),
+            })?;
+        }
+
+        let short_circuit = Arc::new(AtomicBool::new(false));
+        let scratch_dir = self.scratch_dir.clone();
+
+        // Concurrently run prepare across scoped threads
+        let votes: Vec<Result<ParticipantVote, TxError>> = std::thread::scope(|s| {
+            let mut handles = Vec::with_capacity(items.len());
+
+            for (res, intent) in items.iter_mut() {
+                let sc = Arc::clone(&short_circuit);
+                let s_dir = scratch_dir.clone();
+                let handle = s.spawn(move || {
+                    if sc.load(Ordering::Relaxed) {
+                        return Ok(ParticipantVote::Aborted {
+                            reason: "Short-circuited due to peer participant failure".into(),
+                        });
+                    }
+
+                    let res_vote = res.prepare(tid, intent, &s_dir);
+                    if let Ok(ParticipantVote::Aborted { .. }) = &res_vote {
+                        sc.store(true, Ordering::SeqCst);
+                    }
+                    res_vote
+                });
+                handles.push(handle);
+            }
+
+            handles.into_iter().map(|h| h.join().unwrap()).collect()
+        });
+
+        // Process collected votes and log to WAL
+        let mut final_votes = Vec::with_capacity(votes.len());
+        for (idx, vote_res) in votes.into_iter().enumerate() {
+            let pid = items[idx].0.id().clone();
+            let vote = vote_res?;
+
+            match &vote {
+                ParticipantVote::Prepared(receipt) => {
+                    self.wal.append(&WalPayload::Prepared {
+                        tid: *tid,
+                        participant_id: pid.clone(),
+                        receipt: receipt.clone(),
+                    })?;
+
+                    if let Some(t) = self.transactions.get_mut(tid) {
+                        t.receipts.insert(pid, receipt.clone());
+                    }
+                }
+                ParticipantVote::Aborted { reason } => {
+                    self.wal.append(&WalPayload::VoteAbort {
+                        tid: *tid,
+                        participant_id: pid,
+                        reason: reason.clone(),
+                    })?;
+
+                    if let Some(t) = self.transactions.get_mut(tid) {
+                        t.state = TxState::Aborting;
+                        t.abort_reason = Some(reason.clone());
+                    }
+                }
+            }
+            final_votes.push(vote);
+        }
+
+        if let Some(t) = self.transactions.get_mut(tid) {
+            if t.receipts.len() == t.participants.len() && t.state != TxState::Aborting {
+                t.state = TxState::Prepared;
+            }
+        }
+
+        Ok(final_votes)
     }
 
     /// Phase 2: COMMIT. Globally commits all prepared participants atomically.
