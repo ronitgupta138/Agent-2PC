@@ -2,3 +2,6 @@
 .agent-tx/
 *.tmp
 *.bak
+dist/
+build/
+*.egg-info/
