@@ -16,7 +16,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-0891b2?style=flat-square&labelColor=0a0b0e)](LICENSE)
 [![Rust: 1.80+](https://img.shields.io/badge/Rust-1.80+-0891b2?style=flat-square&labelColor=0a0b0e)](https://www.rust-lang.org)
 [![Build Status](https://img.shields.io/badge/Tests-24%2F24%20Passing-0891b2?style=flat-square&labelColor=0a0b0e)](#-verification--test-suite)
-[![M8ven Score](https://m8ven.ai/badge/mcp/ronitgupta138-agent-2pc-d4r842?v=eec8a68bec6a29ff62865c52f44981d1)](https://m8ven.ai/mcp/ronitgupta138-agent-2pc-d4r842?s=readme)
+[![M8ven Score](https://m8ven.ai/badge/mcp/ronitgupta138-agent-2pc-d4r842?v=30e51977efdea447df45dc9f70b80877)](https://m8ven.ai/mcp/ronitgupta138-agent-2pc-d4r842?s=readme)
 [![Views](https://hits.sh/github.com/ronitgupta138/agent-2pc.svg?style=flat-square&label=Views&color=0891b2&labelColor=0a0b0e)](https://hits.sh/github.com/ronitgupta138/agent-2pc/)
 [![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa?style=flat-square&labelColor=0a0b0e)](https://github.com/sponsors/ronitgupta138)
 
