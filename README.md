@@ -377,6 +377,20 @@ test result: ok. 24 passed; 0 failed; 0 ignored; finished in 1.91s
 
 ---
 
+## 💖 Sponsoring & Supporting Development
+
+`agent-2pc` is an independent open-source project bringing database-grade ACID two-phase commit and crash-consistent WAL guarantees to autonomous AI coding agents, harnesses, and MCP pipelines.
+
+If `agent-2pc` protects your workspaces from dirty repository state, broken syntax, or hallucinated LLM rollbacks, consider **[sponsoring development on GitHub](https://github.com/sponsors/ronitgupta138)**:
+
+* **☕ Backers ($5–$10/mo):** Named recognition in release notes and README backer roll.
+* **⚡ Power Users & Agent Teams ($25/mo):** Direct influence on roadmap RFCs and priority feature development.
+* **🏢 Organization Sponsors ($100/mo):** Prominent company logo and link displayed on the repository README.
+
+👉 **[Become a GitHub Sponsor](https://github.com/sponsors/ronitgupta138)**
+
+---
+
 ## 📜 License
 
 MIT License. Designed and engineered by [Ronit Gupta](https://github.com/ronitgupta138).
