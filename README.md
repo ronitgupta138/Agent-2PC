@@ -12,10 +12,10 @@
 ### **Two-Phase Commit & Compensating Journaling Engine for AI Agent Tool Execution**
 
 [![GitHub Stars](https://img.shields.io/github/stars/ronitgupta138/agent-2pc?style=flat-square&color=0891b2&labelColor=0a0b0e)](https://github.com/ronitgupta138/agent-2pc/stargazers)
-[![Crates.io](https://img.shields.io/badge/crates.io-v1.3.0-0891b2?style=flat-square&labelColor=0a0b0e)](https://crates.io/crates/agent-2pc)
+[![Crates.io](https://img.shields.io/badge/crates.io-v1.4.0-0891b2?style=flat-square&labelColor=0a0b0e)](https://crates.io/crates/agent-2pc)
 [![License: MIT](https://img.shields.io/badge/License-MIT-0891b2?style=flat-square&labelColor=0a0b0e)](LICENSE)
 [![Rust: 1.80+](https://img.shields.io/badge/Rust-1.80+-0891b2?style=flat-square&labelColor=0a0b0e)](https://www.rust-lang.org)
-[![Build Status](https://img.shields.io/badge/Tests-35%2F35%20Passing-0891b2?style=flat-square&labelColor=0a0b0e)](#-verification--test-suite)
+[![Build Status](https://img.shields.io/badge/Tests-37%2F37%20Passing-0891b2?style=flat-square&labelColor=0a0b0e)](#-verification--test-suite)
 [![M8ven Score](https://m8ven.ai/badge/mcp/ronitgupta138/agent-2pc)](https://m8ven.ai/mcp/ronitgupta138/agent-2pc?s=readme)
 [![Views](https://hits.sh/github.com/ronitgupta138/agent-2pc.svg?style=flat-square&label=Views&color=0891b2&labelColor=0a0b0e)](https://hits.sh/github.com/ronitgupta138/agent-2pc/)
 [![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa?style=flat-square&labelColor=0a0b0e)](https://github.com/sponsors/ronitgupta138)
@@ -171,6 +171,7 @@ agent-2pc commit --tid "$TID"
 | `agent-2pc recover` | Scan WAL and resolve uncommitted crashes | Post-crash startup recovery |
 | `agent-2pc compact` | Zero-downtime log compaction & checkpointing | Purge finalized tx, reclaim disk |
 | `agent-2pc daemon` | Background UDS service (`start`, `stop`, `status`)| Multi-agent zero-disk-lock IPC |
+| `agent-2pc exec` | Transparent command execution & side-effect staging | Automated compiler/linter mutation capture |
 | `agent-2pc mcp` | Zero-dependency JSON-RPC 2.0 stdio server | Claude Desktop, Cursor, Hermes |
 | `agent-2pc run-batch` | One-shot atomic execution from JSON manifest | Scripted multi-step workflows |
 
@@ -353,7 +354,7 @@ cargo test
 ```
 
 ```
-running 35 tests
+running 37 tests
 test test_reflink_or_copy_snapshot_staging ... ok
 test test_monitor_stats_collection ... ok
 test test_wal_framing_and_crc32_tamper_detection ... ok
@@ -387,10 +388,12 @@ test test_nested_multiple_savepoints ... ok
 test test_daemon_lifecycle_and_ping ... ok
 test test_daemon_transaction_workflow_over_uds ... ok
 test test_daemon_concurrent_clients ... ok
+test test_exec_runner_autostages_new_and_modified_files ... ok
+test test_exec_runner_failed_command_does_not_stage_and_reverts ... ok
 test test_wal_append_latency_benchmark ... ok
 test test_end_to_end_2pc_transaction_throughput ... ok
 
-test result: ok. 35 passed; 0 failed; 0 ignored; finished in 2.05s
+test result: ok. 37 passed; 0 failed; 0 ignored; finished in 2.08s
 ```
 
 ---
