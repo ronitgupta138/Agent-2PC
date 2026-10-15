@@ -104,6 +104,29 @@ enum Commands {
         participant: Option<String>,
     },
 
+    /// Stage a targeted substring replacement in Phase 1 (FsAdapter)
+    StageReplace {
+        /// Target transaction ID
+        #[arg(long)]
+        tid: String,
+
+        /// Destination file path
+        #[arg(long)]
+        path: PathBuf,
+
+        /// Exact string to find and replace
+        #[arg(long)]
+        old_string: String,
+
+        /// Replacement string
+        #[arg(long)]
+        new_string: String,
+
+        /// Optional custom participant ID
+        #[arg(long)]
+        participant: Option<String>,
+    },
+
     /// Stage and verify a shell command execution in Phase 1 (CommandAdapter)
     StageCmd {
         /// Target transaction ID
@@ -489,6 +512,23 @@ fn run_cli(cli: Cli) -> Result<(), TxError> {
         }
 
         Commands::Begin { timeout } => {
+            let sock_path = tx_dir.join("agent-2pc.sock");
+            if let Ok(mut client) = agent_2pc::ipc::IpcClient::try_connect(&sock_path)
+                && let Ok(res) = client.call("begin", serde_json::json!({ "timeout_ms": timeout })) {
+                    if cli.json {
+                        println!("{}", res);
+                    } else {
+                        let tid = res.get("tid").and_then(|v| v.as_str()).unwrap_or("unknown");
+                        println!(
+                            "{} Started transaction {} (timeout: {}ms) [UDS Daemon Accelerated]",
+                            "✔".green().bold(),
+                            tid.cyan().bold(),
+                            timeout
+                        );
+                    }
+                    return Ok(());
+            }
+
             let mut coord = Coordinator::new(tx_dir)?;
             let tid = coord.begin(Some(timeout))?;
             if cli.json {
@@ -517,6 +557,29 @@ fn run_cli(cli: Cli) -> Result<(), TxError> {
             create_dirs,
             participant,
         } => {
+            let sock_path = tx_dir.join("agent-2pc.sock");
+            if let Ok(mut client) = agent_2pc::ipc::IpcClient::try_connect(&sock_path) {
+                let params = serde_json::json!({
+                    "tid": tid,
+                    "path": path.to_str().unwrap_or_default(),
+                    "content": content,
+                    "create_dirs": create_dirs,
+                    "participant": participant,
+                });
+                if let Ok(res) = client.call("stage_write", params) {
+                    if cli.json {
+                        println!("{}", res);
+                    } else {
+                        println!(
+                            "{} Staged write for {} [UDS Daemon Accelerated]",
+                            "✔ PREPARED".green().bold(),
+                            path.display().to_string().bold()
+                        );
+                    }
+                    return Ok(());
+                }
+            }
+
             let mut coord = Coordinator::new(tx_dir)?;
             let tid = TransactionId::parse(&tid)?;
             let pid = participant.unwrap_or_else(|| {
@@ -607,6 +670,90 @@ fn run_cli(cli: Cli) -> Result<(), TxError> {
                     } else {
                         println!(
                             "{} Staged patch for {} (Participant: {})",
+                            "✔ PREPARED".green().bold(),
+                            path.display().to_string().bold(),
+                            receipt.participant_id
+                        );
+                    }
+                }
+                ParticipantVote::Aborted { reason } => {
+                    if cli.json {
+                        println!(
+                            "{}",
+                            serde_json::json!({
+                                "status": "error",
+                                "vote": "ABORTED",
+                                "reason": reason
+                            })
+                        );
+                    } else {
+                        println!("{} {}", "✖ ABORTED:".red().bold(), reason);
+                    }
+                }
+            }
+        }
+
+        Commands::StageReplace {
+            tid,
+            path,
+            old_string,
+            new_string,
+            participant,
+        } => {
+            let sock_path = tx_dir.join("agent-2pc.sock");
+            if let Ok(mut client) = agent_2pc::ipc::IpcClient::try_connect(&sock_path) {
+                let params = serde_json::json!({
+                    "tid": tid,
+                    "path": path.to_str().unwrap_or_default(),
+                    "old_string": old_string,
+                    "new_string": new_string,
+                    "participant": participant,
+                });
+                if let Ok(res) = client.call("stage_replace", params) {
+                    if cli.json {
+                        println!("{}", res);
+                    } else {
+                        println!(
+                            "{} Staged replacement for {} [UDS Daemon Accelerated]",
+                            "✔ PREPARED".green().bold(),
+                            path.display().to_string().bold()
+                        );
+                    }
+                    return Ok(());
+                }
+            }
+
+            let mut coord = Coordinator::new(tx_dir)?;
+            let tid = TransactionId::parse(&tid)?;
+            let pid = participant.unwrap_or_else(|| {
+                format!(
+                    "fs_replace_{}",
+                    path.file_name().unwrap_or_default().to_string_lossy()
+                )
+            });
+
+            let mut adapter = FsAdapter::new(pid);
+            let intent = ResourceIntent::FsReplace {
+                path: path.clone(),
+                old_string,
+                new_string,
+            };
+
+            let vote = coord.prepare_participant(&tid, &mut adapter, intent)?;
+            match vote {
+                ParticipantVote::Prepared(receipt) => {
+                    if cli.json {
+                        println!(
+                            "{}",
+                            serde_json::json!({
+                                "status": "ok",
+                                "vote": "PREPARED",
+                                "receipt": receipt
+                            })
+                        );
+                    } else {
+                        println!(
+                            "{} Staged replacement for {} (Participant: {})",
                             "✔ PREPARED".green().bold(),
                             path.display().to_string().bold(),
                             receipt.participant_id
@@ -864,6 +1011,21 @@ fn run_cli(cli: Cli) -> Result<(), TxError> {
         }
 
         Commands::Commit { tid } => {
+            let sock_path = tx_dir.join("agent-2pc.sock");
+            if let Ok(mut client) = agent_2pc::ipc::IpcClient::try_connect(&sock_path)
+                && let Ok(res) = client.call("commit", serde_json::json!({ "tid": tid })) {
+                    if cli.json {
+                        println!("{}", res);
+                    } else {
+                        println!(
+                            "{} Transaction {} COMMITTED atomically [UDS Daemon Accelerated]",
+                            "✔ 2PC SUCCESS:".green().bold(),
+                            tid.cyan().bold()
+                        );
+                    }
+                    return Ok(());
+            }
+
             let mut coord = Coordinator::new(tx_dir)?;
             let tid = TransactionId::parse(&tid)?;
 
@@ -908,6 +1070,21 @@ fn run_cli(cli: Cli) -> Result<(), TxError> {
         }
 
         Commands::Abort { tid, reason } => {
+            let sock_path = tx_dir.join("agent-2pc.sock");
+            if let Ok(mut client) = agent_2pc::ipc::IpcClient::try_connect(&sock_path)
+                && let Ok(res) = client.call("abort", serde_json::json!({ "tid": tid, "reason": reason })) {
+                    if cli.json {
+                        println!("{}", res);
+                    } else {
+                        println!(
+                            "{} Transaction {} ABORTED & rolled back [UDS Daemon Accelerated]",
+                            "✖ 2PC ABORT:".red().bold(),
+                            tid.cyan().bold()
+                        );
+                    }
+                    return Ok(());
+            }
+
             let mut coord = Coordinator::new(tx_dir)?;
             let tid = TransactionId::parse(&tid)?;
 
@@ -953,6 +1130,26 @@ fn run_cli(cli: Cli) -> Result<(), TxError> {
         }
 
         Commands::Status { tid } => {
+            let sock_path = tx_dir.join("agent-2pc.sock");
+            if let Ok(mut client) = agent_2pc::ipc::IpcClient::try_connect(&sock_path) {
+                let params = match &tid {
+                    Some(t) => serde_json::json!({ "tid": t }),
+                    None => serde_json::json!({}),
+                };
+                if let Ok(res) = client.call("status", params) {
+                    if cli.json {
+                        println!("{}", res);
+                    } else if tid.is_some() {
+                        println!("Transaction Status [UDS Daemon Accelerated]:");
+                        println!("{}", serde_json::to_string_pretty(&res)?);
+                    } else {
+                        println!("Active Transactions [UDS Daemon Accelerated]:");
+                        println!("{}", serde_json::to_string_pretty(&res)?);
+                    }
+                    return Ok(());
+                }
+            }
+
             let coord = Coordinator::new(tx_dir)?;
             if let Some(t_str) = tid {
                 let tid = TransactionId::parse(&t_str)?;
@@ -1036,6 +1233,22 @@ fn run_cli(cli: Cli) -> Result<(), TxError> {
         }
 
         Commands::Savepoint { tid, name } => {
+            let sock_path = tx_dir.join("agent-2pc.sock");
+            if let Ok(mut client) = agent_2pc::ipc::IpcClient::try_connect(&sock_path)
+                && let Ok(res) = client.call("savepoint", serde_json::json!({ "tid": tid, "name": name })) {
+                    if cli.json {
+                        println!("{}", res);
+                    } else {
+                        println!(
+                            "{} Created Savepoint `{}` in transaction {} [UDS Daemon Accelerated]",
+                            "✔".green().bold(),
+                            name.cyan().bold(),
+                            tid.bold()
+                        );
+                    }
+                    return Ok(());
+            }
+
             let mut coord = Coordinator::new(tx_dir)?;
             let tid_obj = TransactionId::parse(&tid)?;
             let sp = coord.savepoint(&tid_obj, &name)?;
@@ -1054,6 +1267,24 @@ fn run_cli(cli: Cli) -> Result<(), TxError> {
         }
 
         Commands::RollbackTo { tid, name } => {
+            let sock_path = tx_dir.join("agent-2pc.sock");
+            if let Ok(mut client) = agent_2pc::ipc::IpcClient::try_connect(&sock_path)
+                && let Ok(res) = client.call("rollback_to", serde_json::json!({ "tid": tid, "name": name })) {
+                    if cli.json {
+                        println!("{}", res);
+                    } else {
+                        let unwound = res.get("unwound_participants").and_then(|v| v.as_u64()).unwrap_or(0);
+                        println!(
+                            "{} Rolled back transaction {} to savepoint `{}` (unwound: {}) [UDS Daemon Accelerated]",
+                            "✔".green().bold(),
+                            tid.bold(),
+                            name.cyan().bold(),
+                            unwound
+                        );
+                    }
+                    return Ok(());
+            }
+
             let mut coord = Coordinator::new(tx_dir)?;
             let tid_obj = TransactionId::parse(&tid)?;
             let mut dummy_resources: Vec<Box<dyn ResourceManager>> = Vec::new();

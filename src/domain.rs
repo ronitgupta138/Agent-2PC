@@ -136,6 +136,12 @@ pub enum ResourceIntent {
         path: PathBuf,
         patch: String,
     },
+    /// Targeted substring replacement with uniqueness validation.
+    FsReplace {
+        path: PathBuf,
+        old_string: String,
+        new_string: String,
+    },
     /// Detached Git worktree transaction.
     GitBranch {
         repo_path: PathBuf,

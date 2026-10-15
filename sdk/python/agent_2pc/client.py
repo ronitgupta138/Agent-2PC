@@ -33,6 +33,16 @@ class TxSession:
             "--command", command
         ])
 
+    def stage_replace(self, path: str, old_string: str, new_string: str) -> Dict[str, Any]:
+        """Phase 1: Stage targeted unique substring replacement."""
+        return self.client._run([
+            "stage-replace",
+            "--tid", self.tid,
+            "--path", path,
+            "--old-string", old_string,
+            "--new-string", new_string
+        ])
+
     def record_read(self, path: str) -> str:
         """Register file fingerprint in read-set for OCC conflict detection."""
         res = self.client._run([

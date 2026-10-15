@@ -25,7 +25,7 @@ fn test_mcp_initialize_and_tools_list() {
 
     let tools_res: serde_json::Value = serde_json::from_str(lines[1]).unwrap();
     let tools = tools_res["result"]["tools"].as_array().unwrap();
-    assert_eq!(tools.len(), 15);
+    assert_eq!(tools.len(), 16);
 
     // Verify all 4 required M8ven / OpenAI hints exist at root and in annotations object
     for t in tools {
@@ -88,6 +88,17 @@ fn test_mcp_full_tool_surface_execution() {
     })).unwrap();
     assert_eq!(patch_res.get("vote").unwrap().as_str().unwrap(), "PREPARED");
 
+    // 5b. agent_2pc_stage_diff
+    let diff_target = tmp.path().join("diff_target.txt");
+    fs::write(&diff_target, "Hello Alpha World").unwrap();
+    let diff_res = mcp.call_tool("agent_2pc_stage_diff", &json!({
+        "tid": tid,
+        "path": diff_target.to_str().unwrap(),
+        "old_string": "Alpha",
+        "new_string": "Beta"
+    })).unwrap();
+    assert_eq!(diff_res.get("vote").unwrap().as_str().unwrap(), "PREPARED");
+
     // 6. agent_2pc_stage_cmd
     let cmd_res = mcp.call_tool("agent_2pc_stage_cmd", &json!({
         "tid": tid,
@@ -102,12 +113,12 @@ fn test_mcp_full_tool_surface_execution() {
     })).unwrap();
     assert_eq!(api_res.get("vote").unwrap().as_str().unwrap(), "PREPARED");
 
-    // 8. agent_2pc_rollback_to (unwinds patch, cmd, and api, keeps write at sp1)
+    // 8. agent_2pc_rollback_to (unwinds patch, diff, cmd, and api, keeps write at sp1)
     let unwound_res = mcp.call_tool("agent_2pc_rollback_to", &json!({
         "tid": tid,
         "name": "sp1"
     })).unwrap();
-    assert_eq!(unwound_res.get("unwound_participants").unwrap().as_u64().unwrap(), 3);
+    assert_eq!(unwound_res.get("unwound_participants").unwrap().as_u64().unwrap(), 4);
 
     // 9. agent_2pc_status
     let status_res = mcp.call_tool("agent_2pc_status", &json!({ "tid": tid })).unwrap();

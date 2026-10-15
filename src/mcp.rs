@@ -199,6 +199,30 @@ impl McpServer {
                 }
             }),
             json!({
+                "name": "agent_2pc_stage_diff",
+                "description": "Phase 1: Stage a targeted unique substring find-and-replace in scratch memory.",
+                "readOnlyHint": false,
+                "destructiveHint": false,
+                "idempotentHint": true,
+                "openWorldHint": false,
+                "annotations": {
+                    "readOnlyHint": false,
+                    "destructiveHint": false,
+                    "idempotentHint": true,
+                    "openWorldHint": false
+                },
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "tid": { "type": "string", "description": "Active Transaction ID" },
+                        "path": { "type": "string", "description": "Destination file path" },
+                        "old_string": { "type": "string", "description": "Exact unique string to find and replace" },
+                        "new_string": { "type": "string", "description": "Replacement string" }
+                    },
+                    "required": ["tid", "path", "old_string", "new_string"]
+                }
+            }),
+            json!({
                 "name": "agent_2pc_stage_cmd",
                 "description": "Phase 1: Run and verify a command in an isolated scratch sandbox before commit.",
                 "readOnlyHint": false,
@@ -461,6 +485,31 @@ impl McpServer {
 
     /// Execute a tool call.
     pub fn call_tool(&self, name: &str, args: &Value) -> Result<Value, TxError> {
+        let sock_path = self.tx_dir.join("agent-2pc.sock");
+        if let Ok(mut client) = crate::ipc::IpcClient::try_connect(&sock_path) {
+            let method_name = match name {
+                "agent_2pc_begin" => Some("begin"),
+                "agent_2pc_stage_write" => Some("stage_write"),
+                "agent_2pc_stage_patch" => Some("stage_patch"),
+                "agent_2pc_stage_cmd" => Some("stage_cmd"),
+                "agent_2pc_stage_api" => Some("stage_api"),
+                "agent_2pc_commit" => Some("commit"),
+                "agent_2pc_abort" => Some("abort"),
+                "agent_2pc_status" => Some("status"),
+                "agent_2pc_record_read" => Some("record_read"),
+                "agent_2pc_compact" => Some("compact"),
+                "agent_2pc_savepoint" => Some("savepoint"),
+                "agent_2pc_rollback_to" => Some("rollback_to"),
+                "agent_2pc_stage_diff" => Some("stage_replace"),
+                _ => None,
+            };
+
+            if let Some(method) = method_name
+                && let Ok(daemon_res) = client.call(method, args.clone()) {
+                    return Ok(daemon_res);
+            }
+        }
+
         let mut coord = Coordinator::new(&self.tx_dir)?;
 
         match name {
@@ -531,6 +580,46 @@ impl McpServer {
                 let intent = ResourceIntent::FsPatch {
                     path: dest_path,
                     patch: patch.to_string(),
+                };
+
+                let vote = coord.prepare_participant(&tid, &mut adapter, intent)?;
+                match vote {
+                    ParticipantVote::Prepared(receipt) => Ok(json!({
+                        "status": "ok",
+                        "vote": "PREPARED",
+                        "receipt": receipt
+                    })),
+                    ParticipantVote::Aborted { reason } => Ok(json!({
+                        "status": "error",
+                        "vote": "ABORTED",
+                        "reason": reason
+                    })),
+                }
+            }
+
+            "agent_2pc_stage_diff" => {
+                let tid_str = args.get("tid").and_then(|v| v.as_str()).ok_or_else(|| {
+                    TxError::Other("Missing required argument: tid".into())
+                })?;
+                let path_str = args.get("path").and_then(|v| v.as_str()).ok_or_else(|| {
+                    TxError::Other("Missing required argument: path".into())
+                })?;
+                let old_string = args.get("old_string").and_then(|v| v.as_str()).ok_or_else(|| {
+                    TxError::Other("Missing required argument: old_string".into())
+                })?;
+                let new_string = args.get("new_string").and_then(|v| v.as_str()).ok_or_else(|| {
+                    TxError::Other("Missing required argument: new_string".into())
+                })?;
+
+                let tid = TransactionId::parse(tid_str)?;
+                let dest_path = PathBuf::from(path_str);
+                let pid = format!("fs_replace_{}", dest_path.file_name().unwrap_or_default().to_string_lossy());
+
+                let mut adapter = FsAdapter::new(pid);
+                let intent = ResourceIntent::FsReplace {
+                    path: dest_path,
+                    old_string: old_string.to_string(),
+                    new_string: new_string.to_string(),
                 };
 
                 let vote = coord.prepare_participant(&tid, &mut adapter, intent)?;

@@ -84,3 +84,62 @@ fn test_end_to_end_2pc_transaction_throughput() {
 
     assert!(ops_per_sec > 10.0);
 }
+
+#[test]
+fn test_daemon_in_memory_ipc_throughput() {
+    use agent_2pc::daemon::Daemon;
+    use agent_2pc::ipc::IpcClient;
+    use serde_json::json;
+    use std::sync::Arc;
+    use std::thread;
+    use std::time::Duration;
+
+    let tmp = tempdir().unwrap();
+    let tx_dir = tmp.path().join(".agent-tx");
+    let dest_dir = tmp.path().join("daemon_dest");
+    fs::create_dir_all(&dest_dir).unwrap();
+
+    let daemon = Arc::new(Daemon::new(&tx_dir).unwrap());
+    let d_clone = Arc::clone(&daemon);
+    let handle = thread::spawn(move || {
+        let _ = d_clone.run();
+    });
+
+    let sock_path = daemon.socket_path();
+    for _ in 0..50 {
+        if IpcClient::is_alive(sock_path) {
+            break;
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+
+    let mut client = IpcClient::try_connect(sock_path).unwrap();
+    let iterations = 200;
+    let start = Instant::now();
+
+    for i in 0..iterations {
+        let begin_res = client.call("begin", json!({ "timeout_ms": 10000 })).unwrap();
+        let tid = begin_res.get("tid").unwrap().as_str().unwrap();
+        let target_file = dest_dir.join(format!("daemon_{}.txt", i));
+
+        let _ = client.call("stage_write", json!({
+            "tid": tid,
+            "path": target_file.to_str().unwrap(),
+            "content": format!("Daemon IPC Payload {}", i),
+            "create_dirs": false
+        })).unwrap();
+
+        let _ = client.call("commit", json!({ "tid": tid })).unwrap();
+    }
+
+    let elapsed = start.elapsed();
+    let ops_per_sec = (iterations as f64) / elapsed.as_secs_f64();
+    println!(
+        "\n⚡ UDS Daemon IPC Throughput: {:.1} tx/sec ({:?} for {} full rounds)",
+        ops_per_sec, elapsed, iterations
+    );
+
+    let _ = client.call("stop", json!({}));
+    handle.join().unwrap();
+    assert!(ops_per_sec > 50.0);
+}

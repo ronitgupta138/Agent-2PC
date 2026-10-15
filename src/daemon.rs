@@ -237,6 +237,61 @@ fn dispatch_request(
             }
         }
 
+        "stage_replace" => {
+            let tid_str = req.params.get("tid").and_then(|v| v.as_str()).unwrap_or_default();
+            let path_str = req.params.get("path").and_then(|v| v.as_str()).unwrap_or_default();
+            let old_string = req.params.get("old_string").and_then(|v| v.as_str()).unwrap_or_default();
+            let new_string = req.params.get("new_string").and_then(|v| v.as_str()).unwrap_or_default();
+            let participant = req.params.get("participant").and_then(|v| v.as_str());
+
+            let tid = match TransactionId::parse(tid_str) {
+                Ok(t) => t,
+                Err(e) => {
+                    return IpcResponse {
+                        success: false,
+                        data: None,
+                        error: Some(e.to_string()),
+                    }
+                }
+            };
+
+            let path = PathBuf::from(path_str);
+            let pid = participant
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| format!("fs_replace_{}", path.file_name().unwrap_or_default().to_string_lossy()));
+
+            let mut adapter = FsAdapter::new(pid.clone());
+            let intent = ResourceIntent::FsReplace {
+                path,
+                old_string: old_string.to_string(),
+                new_string: new_string.to_string(),
+            };
+
+            let mut guard = coord.lock().unwrap();
+            match guard.prepare_participant(&tid, &mut adapter, intent) {
+                Ok(ParticipantVote::Prepared(receipt)) => IpcResponse {
+                    success: true,
+                    data: Some(json!({
+                        "status": "ok",
+                        "vote": "PREPARED",
+                        "participant": pid,
+                        "receipt": receipt
+                    })),
+                    error: None,
+                },
+                Ok(ParticipantVote::Aborted { reason }) => IpcResponse {
+                    success: false,
+                    data: Some(json!({ "vote": "ABORTED", "reason": reason })),
+                    error: Some(format!("Participant voted ABORT: {}", reason)),
+                },
+                Err(e) => IpcResponse {
+                    success: false,
+                    data: None,
+                    error: Some(e.to_string()),
+                },
+            }
+        }
+
         "stage_patch" => {
             let tid_str = req.params.get("tid").and_then(|v| v.as_str()).unwrap_or_default();
             let path_str = req.params.get("path").and_then(|v| v.as_str()).unwrap_or_default();

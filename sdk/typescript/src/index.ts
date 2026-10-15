@@ -31,6 +31,16 @@ export class TxSession {
     ]);
   }
 
+  public async stageReplace(path: string, oldString: string, newString: string): Promise<any> {
+    return this.client.execute([
+      "stage-replace",
+      "--tid", this.tid,
+      "--path", path,
+      "--old-string", oldString,
+      "--new-string", newString
+    ]);
+  }
+
   public async recordRead(path: string): Promise<string> {
     const res = await this.client.execute([
       "record-read",

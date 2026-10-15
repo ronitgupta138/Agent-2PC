@@ -140,6 +140,52 @@ impl ResourceManager for FsAdapter {
                 Ok(ParticipantVote::Prepared(receipt))
             }
 
+            ResourceIntent::FsReplace {
+                path,
+                old_string,
+                new_string,
+            } => {
+                if !path.exists() {
+                    return Ok(ParticipantVote::Aborted {
+                        reason: format!("Target file {} does not exist for replace", path.display()),
+                    });
+                }
+
+                let current_content = fs::read_to_string(path)?;
+                let match_count = current_content.matches(old_string).count();
+                if match_count == 0 {
+                    return Ok(ParticipantVote::Aborted {
+                        reason: format!("Substring not found in {}: '{}'", path.display(), old_string),
+                    });
+                }
+                if match_count > 1 {
+                    return Ok(ParticipantVote::Aborted {
+                        reason: format!(
+                            "Ambiguous replacement: substring '{}' matched {} times in {}",
+                            old_string, match_count, path.display()
+                        ),
+                    });
+                }
+
+                // Backup original file
+                let backup_dir = scratch_dir.join(tid.to_string()).join("backups");
+                fs::create_dir_all(&backup_dir)?;
+                let backup_file = backup_dir.join(format!("{}.bak", self.id.0));
+                reflink_or_copy(path, &backup_file)?;
+                receipt.backup_paths.push(backup_file);
+
+                // Compute updated content and stage to staged_payload
+                let updated = current_content.replacen(old_string, new_string, 1);
+                let staged_file = tx_scratch.join("staged_payload");
+                fs::write(&staged_file, updated)?;
+
+                receipt
+                    .metadata
+                    .insert("target_path".to_string(), path.to_string_lossy().to_string());
+
+                Ok(ParticipantVote::Prepared(receipt))
+            }
+
             _ => Ok(ParticipantVote::Aborted {
                 reason: format!("FsAdapter cannot handle intent type {:?}", intent),
             }),
