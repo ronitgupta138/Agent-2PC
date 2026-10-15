@@ -42,6 +42,20 @@ enum DaemonAction {
     Stop,
     /// Query status of the agent-2pc daemon
     Status,
+    /// Manually trigger a TTL sweep of expired transactions
+    Reap,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+enum HookAction {
+    /// Install pre-commit repository integrity hook into .git/hooks
+    Install {
+        /// Target Git repository root (defaults to current dir)
+        #[arg(long, default_value = ".")]
+        repo_dir: PathBuf,
+    },
+    /// Check whether .agent-tx is clean of pending uncommitted transactions
+    Check,
 }
 
 #[derive(Subcommand)]
@@ -374,6 +388,27 @@ enum Commands {
         #[arg(long, short)]
         file: PathBuf,
     },
+
+    /// Manage Git integrity hooks (prevent committing with dirty uncommitted 2PC transactions)
+    Hook {
+        #[command(subcommand)]
+        action: HookAction,
+    },
+
+    /// Atomically commit 2PC transaction and create a Git commit in one step
+    GitCommit {
+        /// Target transaction ID
+        #[arg(long)]
+        tid: String,
+
+        /// Git commit message
+        #[arg(short, long)]
+        message: String,
+
+        /// Working directory (defaults to current dir)
+        #[arg(long)]
+        dir: Option<PathBuf>,
+    },
 }
 
 #[derive(Serialize, Deserialize)]
@@ -516,6 +551,34 @@ fn run_cli(cli: Cli) -> Result<(), TxError> {
                         "{} Daemon is not running (offline direct-disk fallback active)",
                         "○".yellow().bold()
                     );
+                }
+            }
+
+            DaemonAction::Reap => {
+                let sock_path = tx_dir.join("agent-2pc.sock");
+                if let Ok(mut client) = agent_2pc::ipc::IpcClient::try_connect(&sock_path) {
+                    if let Ok(res) = client.call("reap", serde_json::json!({})) {
+                        if cli.json {
+                            println!("{}", res);
+                        } else {
+                            let count = res.get("reaped_count").and_then(|v| v.as_u64()).unwrap_or(0);
+                            let total = res.get("total_reaped").and_then(|v| v.as_u64()).unwrap_or(0);
+                            println!(
+                                "{} Daemon swept TTL expired transactions (reaped this run: {}, total reaped: {})",
+                                "✔".green().bold(),
+                                count.to_string().cyan().bold(),
+                                total
+                            );
+                        }
+                    } else if cli.json {
+                        println!("{}", serde_json::json!({ "error": "Failed to call daemon reap" }));
+                    } else {
+                        eprintln!("✖ Failed to call daemon reap");
+                    }
+                } else if cli.json {
+                    println!("{}", serde_json::json!({ "error": "Daemon is not running" }));
+                } else {
+                    eprintln!("{} Daemon is not running", "ℹ".yellow().bold());
                 }
             }
         },
@@ -1593,6 +1656,58 @@ fn run_cli(cli: Cli) -> Result<(), TxError> {
                     file.display().to_string().bold(),
                     report.participant_count,
                     report.restored_files
+                );
+            }
+        }
+
+        Commands::Hook { action } => match action {
+            HookAction::Install { repo_dir } => {
+                let report = agent_2pc::git::GitIntegrator::install_hook(&repo_dir, tx_dir)?;
+                if cli.json {
+                    println!("{}", serde_json::to_string_pretty(&report)?);
+                } else {
+                    println!(
+                        "{} Installed Git pre-commit hook to {}",
+                        "✔".green().bold(),
+                        report.hook_path.display().to_string().cyan().bold()
+                    );
+                }
+            }
+            HookAction::Check => {
+                let report = agent_2pc::git::GitIntegrator::check_invariants(tx_dir)?;
+                if cli.json {
+                    println!("{}", serde_json::to_string_pretty(&report)?);
+                } else if report.clean {
+                    println!("{} {}", "✔ CLEAN:".green().bold(), report.message);
+                } else {
+                    eprintln!("{} {}", "✖ INTEGRITY ERROR:".red().bold(), report.message);
+                    for tid in &report.in_flight_tids {
+                        eprintln!("  → In-flight TID: {}", tid.to_string().yellow().bold());
+                    }
+                    std::process::exit(1);
+                }
+            }
+        },
+
+        Commands::GitCommit { tid, message, dir } => {
+            let mut coord = Coordinator::new(tx_dir)?;
+            let tid = TransactionId::parse(&tid)?;
+            let report = agent_2pc::git::GitIntegrator::git_commit(
+                &mut coord,
+                &tid,
+                &message,
+                dir.as_deref(),
+            )?;
+
+            if cli.json {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            } else {
+                println!(
+                    "{} Atomically committed 2PC transaction {} to Git (Commit: {}, {} files)",
+                    "✔".green().bold(),
+                    tid.to_string().cyan().bold(),
+                    report.commit_hash.yellow().bold(),
+                    report.files_committed.len()
                 );
             }
         }

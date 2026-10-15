@@ -544,6 +544,46 @@ impl McpServer {
                     },
                     "required": ["file"]
                 }
+            }),
+            json!({
+                "name": "agent_2pc_hook_check",
+                "description": "Verify repository git integrity: assert zero in-flight uncommitted 2PC transactions exist.",
+                "readOnlyHint": true,
+                "destructiveHint": false,
+                "idempotentHint": true,
+                "openWorldHint": false,
+                "annotations": {
+                    "readOnlyHint": true,
+                    "destructiveHint": false,
+                    "idempotentHint": true,
+                    "openWorldHint": false
+                },
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {}
+                }
+            }),
+            json!({
+                "name": "agent_2pc_git_commit",
+                "description": "Atomically commit active 2PC transaction and immediately create a Git commit with touched files.",
+                "readOnlyHint": false,
+                "destructiveHint": true,
+                "idempotentHint": true,
+                "openWorldHint": true,
+                "annotations": {
+                    "readOnlyHint": false,
+                    "destructiveHint": true,
+                    "idempotentHint": true,
+                    "openWorldHint": true
+                },
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "tid": { "type": "string", "description": "Active Transaction ID" },
+                        "message": { "type": "string", "description": "Git commit message" }
+                    },
+                    "required": ["tid", "message"]
+                }
             })
         ]
     }
@@ -1023,6 +1063,23 @@ impl McpServer {
                     "status": "ok",
                     "report": report
                 }))
+            }
+
+            "agent_2pc_hook_check" => {
+                let report = crate::git::GitIntegrator::check_invariants(&self.tx_dir)?;
+                Ok(serde_json::to_value(report)?)
+            }
+
+            "agent_2pc_git_commit" => {
+                let tid_str = args.get("tid").and_then(|v| v.as_str()).ok_or_else(|| {
+                    TxError::Other("Missing required argument: tid".into())
+                })?;
+                let message = args.get("message").and_then(|v| v.as_str()).ok_or_else(|| {
+                    TxError::Other("Missing required argument: message".into())
+                })?;
+                let tid = TransactionId::parse(tid_str)?;
+                let report = crate::git::GitIntegrator::git_commit(&mut coord, &tid, message, None)?;
+                Ok(serde_json::to_value(report)?)
             }
 
             unknown => Err(TxError::Other(format!("Unknown tool: {}", unknown))),

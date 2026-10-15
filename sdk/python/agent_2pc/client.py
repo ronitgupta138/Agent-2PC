@@ -57,6 +57,14 @@ class TxSession:
             args.extend(["--output", output])
         return self.client._run(args)
 
+    def git_commit(self, message: str) -> Dict[str, Any]:
+        """Atomically commit 2PC transaction and create a Git commit."""
+        return self.client._run([
+            "git-commit",
+            "--tid", self.tid,
+            "--message", message
+        ])
+
     def record_read(self, path: str) -> str:
         """Register file fingerprint in read-set for OCC conflict detection."""
         res = self.client._run([

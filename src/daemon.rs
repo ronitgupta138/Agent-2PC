@@ -7,7 +7,7 @@ use crate::adapters::{
     reconstruct_adapters, ApiAdapter, CommandAdapter, FsAdapter, ResourceManager,
 };
 use crate::coordinator::Coordinator;
-use crate::domain::{ParticipantVote, ResourceIntent, TransactionId, TxError};
+use crate::domain::{ParticipantVote, ResourceIntent, TransactionId, TxError, TxState};
 use crate::ipc::{IpcRequest, IpcResponse};
 use serde_json::json;
 use std::collections::HashMap;
@@ -15,7 +15,7 @@ use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -26,6 +26,8 @@ pub struct Daemon {
     socket_path: PathBuf,
     coordinator: Arc<Mutex<Coordinator>>,
     running: Arc<AtomicBool>,
+    reaped_count: Arc<AtomicUsize>,
+    compact_count: Arc<AtomicUsize>,
 }
 
 impl Daemon {
@@ -36,12 +38,16 @@ impl Daemon {
         let socket_path = base_dir.join("agent-2pc.sock");
         let coordinator = Arc::new(Mutex::new(Coordinator::new(&base_dir)?));
         let running = Arc::new(AtomicBool::new(false));
+        let reaped_count = Arc::new(AtomicUsize::new(0));
+        let compact_count = Arc::new(AtomicUsize::new(0));
 
         Ok(Self {
             base_dir,
             socket_path,
             coordinator,
             running,
+            reaped_count,
+            compact_count,
         })
     }
 
@@ -51,6 +57,14 @@ impl Daemon {
 
     pub fn base_dir(&self) -> &Path {
         &self.base_dir
+    }
+
+    /// Return telemetry stats: (reaped_transactions, auto_compactions)
+    pub fn reaper_stats(&self) -> (usize, usize) {
+        (
+            self.reaped_count.load(Ordering::SeqCst),
+            self.compact_count.load(Ordering::SeqCst),
+        )
     }
 
     /// Run the daemon event loop, serving client connections until stopped.
@@ -63,13 +77,63 @@ impl Daemon {
         listener.set_nonblocking(true)?;
         self.running.store(true, Ordering::SeqCst);
 
+        // Spawn background TTL reaper & auto-compactor thread
+        let coord_reaper = Arc::clone(&self.coordinator);
+        let running_reaper = Arc::clone(&self.running);
+        let base_dir_reaper = self.base_dir.clone();
+        let reaped_counter = Arc::clone(&self.reaped_count);
+        let compact_counter = Arc::clone(&self.compact_count);
+
+        let reaper_thread = thread::spawn(move || {
+            while running_reaper.load(Ordering::SeqCst) {
+                thread::sleep(Duration::from_millis(250));
+                if !running_reaper.load(Ordering::SeqCst) {
+                    break;
+                }
+
+                // 1. Check expired transactions
+                let mut expired = Vec::new();
+                if let Ok(guard) = coord_reaper.lock() {
+                    let now = chrono::Utc::now();
+                    for tx in guard.active_transactions() {
+                        if tx.state == TxState::Active || tx.state == TxState::Prepared {
+                            let expiry = tx.created_at + chrono::Duration::milliseconds(tx.timeout_ms as i64);
+                            if now > expiry {
+                                expired.push((tx.tid, tx.clone()));
+                            }
+                        }
+                    }
+                }
+
+                for (tid, tx) in expired {
+                    if let Ok(mut guard) = coord_reaper.lock() {
+                        let mut adapters = reconstruct_adapters(&tx.participants);
+                        let _ = guard.abort(&tid, "TTL expired by daemon reaper", &mut adapters[..]);
+                        reaped_counter.fetch_add(1, Ordering::SeqCst);
+                    }
+                }
+
+                // 2. Auto-compaction if WAL exceeds threshold (e.g. 2MB)
+                let wal_path = base_dir_reaper.join("wal.bin");
+                if let Ok(meta) = fs::metadata(&wal_path)
+                    && meta.len() > 2 * 1024 * 1024
+                    && let Ok(mut guard) = coord_reaper.lock()
+                    && guard.compact().is_ok()
+                {
+                    compact_counter.fetch_add(1, Ordering::SeqCst);
+                }
+            }
+        });
+
         while self.running.load(Ordering::SeqCst) {
             match listener.accept() {
                 Ok((stream, _)) => {
                     let coord = Arc::clone(&self.coordinator);
                     let running = Arc::clone(&self.running);
+                    let reaped = Arc::clone(&self.reaped_count);
+                    let compact = Arc::clone(&self.compact_count);
                     thread::spawn(move || {
-                        let _ = handle_connection(stream, coord, running);
+                        let _ = handle_connection(stream, coord, running, reaped, compact);
                     });
                 }
                 Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
@@ -78,6 +142,8 @@ impl Daemon {
                 Err(e) => return Err(TxError::Io(e)),
             }
         }
+
+        let _ = reaper_thread.join();
 
         if self.socket_path.exists() {
             let _ = fs::remove_file(&self.socket_path);
@@ -99,6 +165,8 @@ fn handle_connection(
     mut stream: UnixStream,
     coord: Arc<Mutex<Coordinator>>,
     running: Arc<AtomicBool>,
+    reaped_count: Arc<AtomicUsize>,
+    compact_count: Arc<AtomicUsize>,
 ) -> Result<(), TxError> {
     stream.set_read_timeout(Some(Duration::from_secs(30)))?;
     stream.set_write_timeout(Some(Duration::from_secs(30)))?;
@@ -130,7 +198,7 @@ fn handle_connection(
             }
         };
 
-        let resp = dispatch_request(&req, &coord, &running);
+        let resp = dispatch_request(&req, &coord, &running, &reaped_count, &compact_count);
         let mut out = serde_json::to_string(&resp)?;
         out.push('\n');
         let _ = stream.write_all(out.as_bytes());
@@ -144,6 +212,8 @@ fn dispatch_request(
     req: &IpcRequest,
     coord: &Arc<Mutex<Coordinator>>,
     running: &Arc<AtomicBool>,
+    reaped_count: &Arc<AtomicUsize>,
+    compact_count: &Arc<AtomicUsize>,
 ) -> IpcResponse {
     match req.method.as_str() {
         "ping" => IpcResponse {
@@ -669,9 +739,44 @@ fn dispatch_request(
                     .collect();
                 IpcResponse {
                     success: true,
-                    data: Some(json!(list)),
+                    data: Some(json!({
+                        "active": list,
+                        "reaped_transactions": reaped_count.load(Ordering::SeqCst),
+                        "auto_compactions": compact_count.load(Ordering::SeqCst),
+                    })),
                     error: None,
                 }
+            }
+        }
+
+        "reap" => {
+            let mut guard = coord.lock().unwrap();
+            let now = chrono::Utc::now();
+            let mut expired = Vec::new();
+            for tx in guard.active_transactions() {
+                if tx.state == TxState::Active || tx.state == TxState::Prepared {
+                    let expiry = tx.created_at + chrono::Duration::milliseconds(tx.timeout_ms as i64);
+                    if now > expiry {
+                        expired.push((tx.tid, tx.clone()));
+                    }
+                }
+            }
+
+            let count = expired.len();
+            for (tid, tx) in expired {
+                let mut adapters = reconstruct_adapters(&tx.participants);
+                let _ = guard.abort(&tid, "TTL expired by daemon reap command", &mut adapters[..]);
+                reaped_count.fetch_add(1, Ordering::SeqCst);
+            }
+
+            IpcResponse {
+                success: true,
+                data: Some(json!({
+                    "status": "ok",
+                    "reaped_count": count,
+                    "total_reaped": reaped_count.load(Ordering::SeqCst)
+                })),
+                error: None,
             }
         }
 

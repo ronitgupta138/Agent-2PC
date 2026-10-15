@@ -1,6 +1,6 @@
 {
   "name": "agent-2pc",
-  "version": "1.9.0",
+  "version": "2.0.0",
   "description": "Two-Phase Commit (2PC) & Compensating Journaling Engine for AI Agent Tool Execution",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

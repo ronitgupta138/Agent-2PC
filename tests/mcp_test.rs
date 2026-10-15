@@ -25,7 +25,7 @@ fn test_mcp_initialize_and_tools_list() {
 
     let tools_res: serde_json::Value = serde_json::from_str(lines[1]).unwrap();
     let tools = tools_res["result"]["tools"].as_array().unwrap();
-    assert_eq!(tools.len(), 19);
+    assert_eq!(tools.len(), 21);
 
     // Verify all 4 required M8ven / OpenAI hints exist at root and in annotations object
     for t in tools {
@@ -203,4 +203,8 @@ fn test_mcp_full_tool_surface_execution() {
         "file": bundle_file.to_str().unwrap()
     })).unwrap();
     assert_eq!(import_res.get("status").unwrap().as_str().unwrap(), "ok");
+
+    // 19. agent_2pc_hook_check
+    let hook_res = mcp.call_tool("agent_2pc_hook_check", &json!({})).unwrap();
+    assert!(hook_res.get("clean").is_some());
 }

@@ -82,6 +82,14 @@ export class TxSession {
     return this.client.execute(args);
   }
 
+  public async gitCommit(message: string): Promise<any> {
+    return this.client.execute([
+      "git-commit",
+      "--tid", this.tid,
+      "--message", message
+    ]);
+  }
+
   public async exec(command: string[], workingDir?: string): Promise<any> {
     const args = ["exec", "--tid", this.tid];
     if (workingDir) {
