@@ -247,6 +247,30 @@ impl McpServer {
                     "type": "object",
                     "properties": {}
                 }
+            }),
+            json!({
+                "name": "agent_2pc_savepoint",
+                "description": "Create a transactional checkpoint (savepoint) within an active transaction for speculative execution.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "tid": { "type": "string", "description": "Active Transaction ID" },
+                        "name": { "type": "string", "description": "Identifier name for the savepoint" }
+                    },
+                    "required": ["tid", "name"]
+                }
+            }),
+            json!({
+                "name": "agent_2pc_rollback_to",
+                "description": "Roll back transaction changes staged after a named savepoint, restoring earlier verified state.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "tid": { "type": "string", "description": "Active Transaction ID" },
+                        "name": { "type": "string", "description": "Name of the savepoint to restore" }
+                    },
+                    "required": ["tid", "name"]
+                }
             })
         ]
     }
@@ -522,6 +546,38 @@ impl McpServer {
             "agent_2pc_compact" => {
                 let report = coord.compact()?;
                 Ok(serde_json::to_value(report)?)
+            }
+
+            "agent_2pc_savepoint" => {
+                let tid_str = args.get("tid").and_then(|v| v.as_str()).ok_or_else(|| {
+                    TxError::Other("Missing required argument: tid".into())
+                })?;
+                let name_str = args.get("name").and_then(|v| v.as_str()).ok_or_else(|| {
+                    TxError::Other("Missing required argument: name".into())
+                })?;
+
+                let tid = TransactionId::parse(tid_str)?;
+                let sp = coord.savepoint(&tid, name_str)?;
+                Ok(serde_json::to_value(sp)?)
+            }
+
+            "agent_2pc_rollback_to" => {
+                let tid_str = args.get("tid").and_then(|v| v.as_str()).ok_or_else(|| {
+                    TxError::Other("Missing required argument: tid".into())
+                })?;
+                let name_str = args.get("name").and_then(|v| v.as_str()).ok_or_else(|| {
+                    TxError::Other("Missing required argument: name".into())
+                })?;
+
+                let tid = TransactionId::parse(tid_str)?;
+                let mut dummy_resources: Vec<Box<dyn ResourceManager>> = Vec::new();
+                let unwound = coord.rollback_to(&tid, name_str, &mut dummy_resources[..])?;
+                Ok(json!({
+                    "status": "ok",
+                    "tid": tid_str,
+                    "savepoint": name_str,
+                    "unwound_participants": unwound
+                }))
             }
 
             unknown => Err(TxError::Other(format!("Unknown tool: {}", unknown))),
