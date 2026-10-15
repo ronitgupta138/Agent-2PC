@@ -18,3 +18,5 @@ pub mod ipc;
 pub mod daemon;
 pub mod exec;
 pub mod transport;
+pub mod overlay;
+pub mod web_hud;
