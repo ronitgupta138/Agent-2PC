@@ -98,7 +98,7 @@ impl McpServer {
                 },
                 "serverInfo": {
                     "name": "agent-2pc",
-                    "version": "0.2.0"
+                    "version": env!("CARGO_PKG_VERSION")
                 }
             })),
 
@@ -134,6 +134,10 @@ impl McpServer {
             json!({
                 "name": "agent_2pc_begin",
                 "description": "Start a new 2PC transaction session and obtain a unique Transaction ID (TID).",
+                "readOnlyHint": false,
+                "destructiveHint": false,
+                "idempotentHint": false,
+                "openWorldHint": false,
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -144,6 +148,10 @@ impl McpServer {
             json!({
                 "name": "agent_2pc_stage_write",
                 "description": "Phase 1: Stage a file write into isolated scratch space with automatic .bak backup.",
+                "readOnlyHint": false,
+                "destructiveHint": false,
+                "idempotentHint": true,
+                "openWorldHint": false,
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -158,6 +166,10 @@ impl McpServer {
             json!({
                 "name": "agent_2pc_stage_patch",
                 "description": "Phase 1: Stage a unified diff patch into isolated scratch memory.",
+                "readOnlyHint": false,
+                "destructiveHint": false,
+                "idempotentHint": true,
+                "openWorldHint": false,
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -171,6 +183,10 @@ impl McpServer {
             json!({
                 "name": "agent_2pc_stage_cmd",
                 "description": "Phase 1: Run and verify a command in an isolated scratch sandbox before commit.",
+                "readOnlyHint": false,
+                "destructiveHint": false,
+                "idempotentHint": false,
+                "openWorldHint": true,
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -183,6 +199,10 @@ impl McpServer {
             json!({
                 "name": "agent_2pc_stage_api",
                 "description": "Phase 1: Reserve an external API lease with idempotency key and compensation hook.",
+                "readOnlyHint": false,
+                "destructiveHint": false,
+                "idempotentHint": true,
+                "openWorldHint": true,
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -198,6 +218,10 @@ impl McpServer {
             json!({
                 "name": "agent_2pc_commit",
                 "description": "Phase 2: Globally and atomically commit all staged operations.",
+                "readOnlyHint": false,
+                "destructiveHint": false,
+                "idempotentHint": true,
+                "openWorldHint": true,
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -209,6 +233,10 @@ impl McpServer {
             json!({
                 "name": "agent_2pc_abort",
                 "description": "Phase 2: Deterministically roll back all staged changes and restore backups.",
+                "readOnlyHint": false,
+                "destructiveHint": true,
+                "idempotentHint": true,
+                "openWorldHint": true,
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -221,6 +249,10 @@ impl McpServer {
             json!({
                 "name": "agent_2pc_status",
                 "description": "Inspect status of an active transaction or list all in-flight transactions.",
+                "readOnlyHint": true,
+                "destructiveHint": false,
+                "idempotentHint": true,
+                "openWorldHint": false,
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -231,6 +263,10 @@ impl McpServer {
             json!({
                 "name": "agent_2pc_record_read",
                 "description": "Record a file in read-set for optimistic concurrency control (OCC). Fails prepare if modified concurrently.",
+                "readOnlyHint": false,
+                "destructiveHint": false,
+                "idempotentHint": true,
+                "openWorldHint": false,
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -243,6 +279,10 @@ impl McpServer {
             json!({
                 "name": "agent_2pc_compact",
                 "description": "Compact WAL by purging finalized (committed/aborted) transactions while preserving in-flight state.",
+                "readOnlyHint": false,
+                "destructiveHint": true,
+                "idempotentHint": true,
+                "openWorldHint": false,
                 "inputSchema": {
                     "type": "object",
                     "properties": {}
@@ -251,6 +291,10 @@ impl McpServer {
             json!({
                 "name": "agent_2pc_savepoint",
                 "description": "Create a transactional checkpoint (savepoint) within an active transaction for speculative execution.",
+                "readOnlyHint": false,
+                "destructiveHint": false,
+                "idempotentHint": false,
+                "openWorldHint": false,
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -263,6 +307,10 @@ impl McpServer {
             json!({
                 "name": "agent_2pc_rollback_to",
                 "description": "Roll back transaction changes staged after a named savepoint, restoring earlier verified state.",
+                "readOnlyHint": false,
+                "destructiveHint": true,
+                "idempotentHint": true,
+                "openWorldHint": false,
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -275,6 +323,10 @@ impl McpServer {
             json!({
                 "name": "agent_2pc_exec",
                 "description": "Execute a shell command and automatically stage any created or modified files into Phase 1.",
+                "readOnlyHint": false,
+                "destructiveHint": false,
+                "idempotentHint": false,
+                "openWorldHint": true,
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -288,6 +340,10 @@ impl McpServer {
             json!({
                 "name": "agent_2pc_overlay_exec",
                 "description": "Execute a command inside an ephemeral kernel OverlayFS sandbox with sub-50µs rollbacks.",
+                "readOnlyHint": false,
+                "destructiveHint": false,
+                "idempotentHint": false,
+                "openWorldHint": true,
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -301,6 +357,10 @@ impl McpServer {
             json!({
                 "name": "agent_2pc_daemon_status",
                 "description": "Check whether the background in-memory UDS daemon is active and responding.",
+                "readOnlyHint": true,
+                "destructiveHint": false,
+                "idempotentHint": true,
+                "openWorldHint": false,
                 "inputSchema": {
                     "type": "object",
                     "properties": {}
