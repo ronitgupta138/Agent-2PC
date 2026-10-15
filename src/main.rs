@@ -30,8 +30,28 @@ struct Cli {
     command: Commands,
 }
 
+#[derive(Subcommand, Debug, Clone)]
+enum DaemonAction {
+    /// Start the agent-2pc daemon
+    Start {
+        /// Run in foreground rather than background
+        #[arg(long, short)]
+        foreground: bool,
+    },
+    /// Stop the running agent-2pc daemon
+    Stop,
+    /// Query status of the agent-2pc daemon
+    Status,
+}
+
 #[derive(Subcommand)]
 enum Commands {
+    /// Manage persistent in-memory 2PC daemon over Unix Domain Socket
+    Daemon {
+        #[command(subcommand)]
+        action: DaemonAction,
+    },
+
     /// Initialize .agent-tx workspace in current directory
     Init,
 
@@ -307,6 +327,125 @@ fn run_cli(cli: Cli) -> Result<(), TxError> {
     let tx_dir = &cli.tx_dir;
 
     match cli.command {
+        Commands::Daemon { action } => match action {
+            DaemonAction::Start { foreground } => {
+                let daemon = agent_2pc::daemon::Daemon::new(tx_dir)?;
+                if agent_2pc::ipc::IpcClient::is_alive(daemon.socket_path()) {
+                    if cli.json {
+                        println!(
+                            "{}",
+                            serde_json::json!({
+                                "status": "already_running",
+                                "socket": daemon.socket_path().display().to_string()
+                            })
+                        );
+                    } else {
+                        println!(
+                            "{} Daemon is already active on {}",
+                            "✔".green().bold(),
+                            daemon.socket_path().display()
+                        );
+                    }
+                    return Ok(());
+                }
+
+                if foreground {
+                    if !cli.json {
+                        println!(
+                            "{} Starting agent-2pc daemon in foreground on {}",
+                            "✔".green().bold(),
+                            daemon.socket_path().display()
+                        );
+                    }
+                    daemon.run()?;
+                } else {
+                    let current_exe = std::env::current_exe()?;
+                    let child = std::process::Command::new(current_exe)
+                        .arg("--tx-dir")
+                        .arg(tx_dir)
+                        .arg("daemon")
+                        .arg("start")
+                        .arg("--foreground")
+                        .stdin(std::process::Stdio::null())
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
+                        .spawn()?;
+
+                    std::thread::sleep(std::time::Duration::from_millis(150));
+
+                    if cli.json {
+                        println!(
+                            "{}",
+                            serde_json::json!({
+                                "status": "started",
+                                "pid": child.id(),
+                                "socket": daemon.socket_path().display().to_string()
+                            })
+                        );
+                    } else {
+                        println!(
+                            "{} Started agent-2pc daemon (PID: {}) on {}",
+                            "✔".green().bold(),
+                            child.id(),
+                            daemon.socket_path().display().to_string().cyan().bold()
+                        );
+                    }
+                }
+            }
+
+            DaemonAction::Stop => {
+                let sock_path = tx_dir.join("agent-2pc.sock");
+                if let Ok(mut client) = agent_2pc::ipc::IpcClient::try_connect(&sock_path) {
+                    let resp = client.call("stop", serde_json::Value::Null)?;
+                    if cli.json {
+                        println!(
+                            "{}",
+                            serde_json::json!({
+                                "status": "stopped",
+                                "response": resp
+                            })
+                        );
+                    } else {
+                        println!("{} Stopped agent-2pc daemon", "✔".green().bold());
+                    }
+                } else {
+                    if sock_path.exists() {
+                        let _ = fs::remove_file(&sock_path);
+                    }
+                    if cli.json {
+                        println!("{}", serde_json::json!({ "status": "not_running" }));
+                    } else {
+                        println!("{} Daemon is not running", "ℹ".yellow().bold());
+                    }
+                }
+            }
+
+            DaemonAction::Status => {
+                let sock_path = tx_dir.join("agent-2pc.sock");
+                let alive = agent_2pc::ipc::IpcClient::is_alive(&sock_path);
+                if cli.json {
+                    println!(
+                        "{}",
+                        serde_json::json!({
+                            "alive": alive,
+                            "socket": sock_path.display().to_string()
+                        })
+                    );
+                } else if alive {
+                    println!(
+                        "{} Daemon is active and responding on {}",
+                        "✔".green().bold(),
+                        sock_path.display().to_string().cyan().bold()
+                    );
+                } else {
+                    println!(
+                        "{} Daemon is not running (offline direct-disk fallback active)",
+                        "○".yellow().bold()
+                    );
+                }
+            }
+        },
+
         Commands::Init => {
             fs::create_dir_all(tx_dir)?;
             let _ = Coordinator::new(tx_dir)?;
