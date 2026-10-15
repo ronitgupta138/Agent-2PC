@@ -12,7 +12,7 @@
 ### **Two-Phase Commit & Compensating Journaling Engine for AI Agent Tool Execution**
 
 [![GitHub Stars](https://img.shields.io/github/stars/ronitgupta138/agent-2pc?style=flat-square&color=0891b2&labelColor=0a0b0e)](https://github.com/ronitgupta138/agent-2pc/stargazers)
-[![Crates.io](https://img.shields.io/badge/crates.io-v1.7.0-0891b2?style=flat-square&labelColor=0a0b0e)](https://crates.io/crates/agent-2pc)
+[![Crates.io](https://img.shields.io/badge/crates.io-v1.7.1-0891b2?style=flat-square&labelColor=0a0b0e)](https://crates.io/crates/agent-2pc)
 [![License: MIT](https://img.shields.io/badge/License-MIT-0891b2?style=flat-square&labelColor=0a0b0e)](LICENSE)
 [![Rust: 1.80+](https://img.shields.io/badge/Rust-1.80+-0891b2?style=flat-square&labelColor=0a0b0e)](https://www.rust-lang.org)
 [![Build Status](https://img.shields.io/badge/Tests-43%2F43%20Passing-0891b2?style=flat-square&labelColor=0a0b0e)](#-verification--test-suite)
