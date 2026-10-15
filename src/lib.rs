@@ -14,3 +14,5 @@ pub mod microvm;
 pub mod cluster;
 pub mod compactor;
 pub mod savepoint;
+pub mod ipc;
+pub mod daemon;
