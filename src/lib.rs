@@ -21,3 +21,5 @@ pub mod transport;
 pub mod overlay;
 pub mod web_hud;
 pub mod wasi;
+pub mod diff;
+pub mod bundle;

@@ -25,7 +25,7 @@ fn test_mcp_initialize_and_tools_list() {
 
     let tools_res: serde_json::Value = serde_json::from_str(lines[1]).unwrap();
     let tools = tools_res["result"]["tools"].as_array().unwrap();
-    assert_eq!(tools.len(), 16);
+    assert_eq!(tools.len(), 19);
 
     // Verify all 4 required M8ven / OpenAI hints exist at root and in annotations object
     for t in tools {
@@ -167,4 +167,40 @@ fn test_mcp_full_tool_surface_execution() {
             "dir": tmp.path().to_str().unwrap()
         }));
     }
+
+    // 16. agent_2pc_diff
+    let diff_tid_res = mcp.call_tool("agent_2pc_begin", &json!({})).unwrap();
+    let diff_tid = diff_tid_res.get("tid").unwrap().as_str().unwrap();
+    let diff_target = tmp.path().join("mcp_diff_target.txt");
+    fs::write(&diff_target, "Original Alpha\n").unwrap();
+    let _ = mcp.call_tool("agent_2pc_stage_write", &json!({
+        "tid": diff_tid,
+        "path": diff_target.to_str().unwrap(),
+        "content": "Modified Alpha Beta\n",
+        "create_dirs": false
+    })).unwrap();
+
+    let diff_res = mcp.call_tool("agent_2pc_diff", &json!({
+        "tid": diff_tid,
+        "stat": false
+    })).unwrap();
+    assert_eq!(diff_res.get("status").unwrap().as_str().unwrap(), "ok");
+    assert!(diff_res.get("diff").unwrap().as_str().unwrap().contains("Modified Alpha Beta"));
+
+    // 17. agent_2pc_export
+    let bundle_file = tmp.path().join("mcp_exported.a2pc");
+    let export_res = mcp.call_tool("agent_2pc_export", &json!({
+        "tid": diff_tid,
+        "output": bundle_file.to_str().unwrap()
+    })).unwrap();
+    assert_eq!(export_res.get("status").unwrap().as_str().unwrap(), "ok");
+    assert!(bundle_file.exists());
+
+    // 18. agent_2pc_import
+    let import_tmp = tempfile::tempdir().unwrap();
+    let import_mcp = agent_2pc::mcp::McpServer::new(import_tmp.path().join(".agent-tx"));
+    let import_res = import_mcp.call_tool("agent_2pc_import", &json!({
+        "file": bundle_file.to_str().unwrap()
+    })).unwrap();
+    assert_eq!(import_res.get("status").unwrap().as_str().unwrap(), "ok");
 }

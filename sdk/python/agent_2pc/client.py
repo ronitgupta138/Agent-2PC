@@ -43,6 +43,20 @@ class TxSession:
             "--new-string", new_string
         ])
 
+    def diff(self, stat: bool = False) -> Dict[str, Any]:
+        """Inspect unified diff or diffstat of staged changes."""
+        args = ["diff", "--tid", self.tid]
+        if stat:
+            args.append("--stat")
+        return self.client._run(args)
+
+    def export_bundle(self, output: Optional[str] = None) -> Dict[str, Any]:
+        """Export transaction to portable .a2pc bundle."""
+        args = ["export", "--tid", self.tid]
+        if output:
+            args.extend(["--output", output])
+        return self.client._run(args)
+
     def record_read(self, path: str) -> str:
         """Register file fingerprint in read-set for OCC conflict detection."""
         res = self.client._run([

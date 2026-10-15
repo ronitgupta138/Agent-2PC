@@ -345,6 +345,35 @@ enum Commands {
         #[arg(long)]
         output: Option<PathBuf>,
     },
+
+    /// Display unified diff of all staged file modifications in an active transaction
+    Diff {
+        /// Target transaction ID
+        #[arg(long)]
+        tid: String,
+
+        /// Display diffstat summary only
+        #[arg(long)]
+        stat: bool,
+    },
+
+    /// Export an active transaction to a portable .a2pc bundle
+    Export {
+        /// Target transaction ID
+        #[arg(long)]
+        tid: String,
+
+        /// Destination bundle file path (.a2pc)
+        #[arg(long, short)]
+        output: Option<PathBuf>,
+    },
+
+    /// Import a transaction bundle (.a2pc) and register as a prepared transaction
+    Import {
+        /// Bundle file path (.a2pc)
+        #[arg(long, short)]
+        file: PathBuf,
+    },
 }
 
 #[derive(Serialize, Deserialize)]
@@ -1512,6 +1541,59 @@ fn run_cli(cli: Cli) -> Result<(), TxError> {
                         println!("{}", merged_with_markers);
                     }
                 }
+            }
+        }
+
+        Commands::Diff { tid, stat } => {
+            let coord = Coordinator::new(tx_dir)?;
+            let tid = TransactionId::parse(&tid)?;
+            let diff = agent_2pc::diff::TransactionDiffer::diff_transaction(&coord, &tid)?;
+
+            if cli.json {
+                println!("{}", serde_json::to_string_pretty(&diff)?);
+            } else if stat {
+                print!("{}", diff.render_stat());
+            } else {
+                print!("{}", diff.render_terminal(!cli.json));
+            }
+        }
+
+        Commands::Export { tid, output } => {
+            let coord = Coordinator::new(tx_dir)?;
+            let tid = TransactionId::parse(&tid)?;
+            let out_path = output.unwrap_or_else(|| PathBuf::from(format!("{}.a2pc", tid)));
+            let report = agent_2pc::bundle::BundleManager::export_bundle(&coord, &tid, &out_path)?;
+
+            if cli.json {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            } else {
+                println!(
+                    "{} Exported transaction {} to {} ({} files, {} bytes, CRC32: 0x{:08x})",
+                    "✔".green().bold(),
+                    tid.to_string().cyan().bold(),
+                    report.output_path.display().to_string().bold(),
+                    report.file_count,
+                    report.bytes_written,
+                    report.crc32
+                );
+            }
+        }
+
+        Commands::Import { file } => {
+            let mut coord = Coordinator::new(tx_dir)?;
+            let report = agent_2pc::bundle::BundleManager::import_bundle(&mut coord, &file)?;
+
+            if cli.json {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            } else {
+                println!(
+                    "{} Imported transaction {} from {} ({} participants, {} restored files)",
+                    "✔".green().bold(),
+                    report.tid.to_string().cyan().bold(),
+                    file.display().to_string().bold(),
+                    report.participant_count,
+                    report.restored_files
+                );
             }
         }
     }

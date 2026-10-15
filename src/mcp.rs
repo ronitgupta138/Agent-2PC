@@ -479,6 +479,71 @@ impl McpServer {
                     "type": "object",
                     "properties": {}
                 }
+            }),
+            json!({
+                "name": "agent_2pc_diff",
+                "description": "Inspect unified diff and stats for all staged file modifications in an active transaction before commit.",
+                "readOnlyHint": true,
+                "destructiveHint": false,
+                "idempotentHint": true,
+                "openWorldHint": false,
+                "annotations": {
+                    "readOnlyHint": true,
+                    "destructiveHint": false,
+                    "idempotentHint": true,
+                    "openWorldHint": false
+                },
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "tid": { "type": "string", "description": "Active Transaction ID" },
+                        "stat": { "type": "boolean", "description": "Return summary diffstat only" }
+                    },
+                    "required": ["tid"]
+                }
+            }),
+            json!({
+                "name": "agent_2pc_export",
+                "description": "Export an active transaction and all its staged artifacts to a portable verified .a2pc bundle.",
+                "readOnlyHint": false,
+                "destructiveHint": false,
+                "idempotentHint": true,
+                "openWorldHint": false,
+                "annotations": {
+                    "readOnlyHint": false,
+                    "destructiveHint": false,
+                    "idempotentHint": true,
+                    "openWorldHint": false
+                },
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "tid": { "type": "string", "description": "Active Transaction ID" },
+                        "output": { "type": "string", "description": "Destination file path (.a2pc)" }
+                    },
+                    "required": ["tid"]
+                }
+            }),
+            json!({
+                "name": "agent_2pc_import",
+                "description": "Import a verified transaction bundle (.a2pc) into this agent coordinator as a prepared transaction.",
+                "readOnlyHint": false,
+                "destructiveHint": false,
+                "idempotentHint": false,
+                "openWorldHint": false,
+                "annotations": {
+                    "readOnlyHint": false,
+                    "destructiveHint": false,
+                    "idempotentHint": false,
+                    "openWorldHint": false
+                },
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "file": { "type": "string", "description": "Bundle file path (.a2pc)" }
+                    },
+                    "required": ["file"]
+                }
             })
         ]
     }
@@ -903,6 +968,60 @@ impl McpServer {
                 Ok(json!({
                     "alive": alive,
                     "socket": sock_path.display().to_string()
+                }))
+            }
+
+            "agent_2pc_diff" => {
+                let tid_str = args.get("tid").and_then(|v| v.as_str()).ok_or_else(|| {
+                    TxError::Other("Missing required argument: tid".into())
+                })?;
+                let stat = args.get("stat").and_then(|v| v.as_bool()).unwrap_or(false);
+                let tid = TransactionId::parse(tid_str)?;
+                let diff = crate::diff::TransactionDiffer::diff_transaction(&coord, &tid)?;
+                if stat {
+                    Ok(json!({
+                        "status": "ok",
+                        "tid": tid_str,
+                        "stat": diff.render_stat(),
+                        "total_additions": diff.total_additions,
+                        "total_deletions": diff.total_deletions,
+                        "files_changed": diff.files.len()
+                    }))
+                } else {
+                    Ok(json!({
+                        "status": "ok",
+                        "tid": tid_str,
+                        "diff": diff.render_terminal(false),
+                        "total_additions": diff.total_additions,
+                        "total_deletions": diff.total_deletions,
+                        "files_changed": diff.files.len()
+                    }))
+                }
+            }
+
+            "agent_2pc_export" => {
+                let tid_str = args.get("tid").and_then(|v| v.as_str()).ok_or_else(|| {
+                    TxError::Other("Missing required argument: tid".into())
+                })?;
+                let tid = TransactionId::parse(tid_str)?;
+                let out_path = args.get("output").and_then(|v| v.as_str())
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| PathBuf::from(format!("{}.a2pc", tid)));
+                let report = crate::bundle::BundleManager::export_bundle(&coord, &tid, &out_path)?;
+                Ok(json!({
+                    "status": "ok",
+                    "report": report
+                }))
+            }
+
+            "agent_2pc_import" => {
+                let file_str = args.get("file").and_then(|v| v.as_str()).ok_or_else(|| {
+                    TxError::Other("Missing required argument: file".into())
+                })?;
+                let report = crate::bundle::BundleManager::import_bundle(&mut coord, file_str)?;
+                Ok(json!({
+                    "status": "ok",
+                    "report": report
                 }))
             }
 

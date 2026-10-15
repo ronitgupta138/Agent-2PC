@@ -66,6 +66,22 @@ export class TxSession {
     ]);
   }
 
+  public async diff(stat?: boolean): Promise<any> {
+    const args = ["diff", "--tid", this.tid];
+    if (stat) {
+      args.push("--stat");
+    }
+    return this.client.execute(args);
+  }
+
+  public async exportBundle(output?: string): Promise<any> {
+    const args = ["export", "--tid", this.tid];
+    if (output) {
+      args.push("--output", output);
+    }
+    return this.client.execute(args);
+  }
+
   public async exec(command: string[], workingDir?: string): Promise<any> {
     const args = ["exec", "--tid", this.tid];
     if (workingDir) {

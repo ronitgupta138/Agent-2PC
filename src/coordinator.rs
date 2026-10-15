@@ -15,7 +15,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 /// In-memory state of an active transaction.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActiveTx {
     pub tid: TransactionId,
     pub state: TxState,
@@ -196,6 +196,32 @@ impl Coordinator {
     /// Return base directory where WAL and scratch state reside.
     pub fn base_dir(&self) -> &Path {
         &self.base_dir
+    }
+
+    /// Return scratch directory where staged payload data resides.
+    pub fn scratch_dir(&self) -> &Path {
+        &self.scratch_dir
+    }
+
+    /// Register an imported transaction bundle into WAL and active memory state.
+    pub fn register_imported_transaction(&mut self, tx: ActiveTx) -> Result<(), TxError> {
+        let tid = tx.tid;
+        self.wal.append(&WalPayload::Begin {
+            tid,
+            timestamp: tx.created_at,
+            timeout_ms: tx.timeout_ms,
+        })?;
+
+        for (pid, receipt) in &tx.receipts {
+            self.wal.append(&WalPayload::Prepared {
+                tid,
+                participant_id: pid.clone(),
+                receipt: receipt.clone(),
+            })?;
+        }
+
+        self.transactions.insert(tid, tx);
+        Ok(())
     }
 
     /// Begin a new transaction with optional timeout in milliseconds (default: 30000ms).

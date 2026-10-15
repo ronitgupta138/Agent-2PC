@@ -12,10 +12,10 @@
 ### **Two-Phase Commit & Compensating Journaling Engine for AI Agent Tool Execution**
 
 [![GitHub Stars](https://img.shields.io/github/stars/ronitgupta138/agent-2pc?style=flat-square&color=0891b2&labelColor=0a0b0e)](https://github.com/ronitgupta138/agent-2pc/stargazers)
-[![Crates.io](https://img.shields.io/badge/crates.io-v1.8.0-0891b2?style=flat-square&labelColor=0a0b0e)](https://crates.io/crates/agent-2pc)
+[![Crates.io](https://img.shields.io/badge/crates.io-v1.9.0-0891b2?style=flat-square&labelColor=0a0b0e)](https://crates.io/crates/agent-2pc)
 [![License: MIT](https://img.shields.io/badge/License-MIT-0891b2?style=flat-square&labelColor=0a0b0e)](LICENSE)
 [![Rust: 1.80+](https://img.shields.io/badge/Rust-1.80+-0891b2?style=flat-square&labelColor=0a0b0e)](https://www.rust-lang.org)
-[![Build Status](https://img.shields.io/badge/Tests-45%2F45%20Passing-0891b2?style=flat-square&labelColor=0a0b0e)](#-verification--test-suite)
+[![Build Status](https://img.shields.io/badge/Tests-49%2F49%20Passing-0891b2?style=flat-square&labelColor=0a0b0e)](#-verification--test-suite)
 [![M8ven Score](https://m8ven.ai/badge/mcp/ronitgupta138/agent-2pc)](https://m8ven.ai/mcp/ronitgupta138/agent-2pc?s=readme)
 [![Views](https://hits.sh/github.com/ronitgupta138/agent-2pc.svg?style=flat-square&label=Views&color=0891b2&labelColor=0a0b0e)](https://hits.sh/github.com/ronitgupta138/agent-2pc/)
 [![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa?style=flat-square&labelColor=0a0b0e)](https://github.com/sponsors/ronitgupta138)
@@ -163,6 +163,9 @@ agent-2pc commit --tid "$TID"
 | `agent-2pc stage-write` | Stage file content with `.bak` snapshot | File creations & modifications |
 | `agent-2pc stage-patch` | Stage unified diff in scratch memory | Targeted patch operations |
 | `agent-2pc stage-replace` | Targeted unique substring find-and-replace | Refactor variables/imports safely |
+| `agent-2pc diff` | Inspect unified diff and stats for staged files | Verify changes before calling commit |
+| `agent-2pc export` | Export active transaction to verified `.a2pc` bundle | Multi-agent handoff & swarm distribution |
+| `agent-2pc import` | Import `.a2pc` bundle and register as prepared | Cross-agent review & atomic commit |
 | `agent-2pc stage-cmd` | Verify command in staging directory | Linters, test suites, migrations |
 | `agent-2pc stage-api` | Lease API idempotency token & compensation | Linear/GitHub/Slack mutations |
 | `agent-2pc commit` | Atomically materialize all staged actions | All steps verified successfully |
@@ -203,6 +206,9 @@ agent-2pc commit --tid "$TID"
 - `agent_2pc_stage_write`: Stages file edits into isolated scratch memory without touching repository code.
 - `agent_2pc_stage_patch`: Stages unified diff patches in scratch memory.
 - `agent_2pc_stage_diff`: Stages targeted substring find-and-replace in scratch memory with uniqueness checks.
+- `agent_2pc_diff`: Inspects unified diff and stats for all staged file modifications in an active transaction before commit.
+- `agent_2pc_export`: Exports an active transaction to a verified portable `.a2pc` bundle for swarm review.
+- `agent_2pc_import`: Imports a verified `.a2pc` bundle into this agent coordinator as a prepared transaction.
 - `agent_2pc_stage_cmd`: Runs syntax checks, tests, or linters in scratch sandbox before commit.
 - `agent_2pc_stage_api`: Reserves external API leases with compensation tokens.
 - `agent_2pc_commit`: Atomically materializes all staged actions across all tools.
@@ -401,11 +407,15 @@ test test_web_hud_server_http_and_api ... ok
 test test_overlay_runner_execution_and_rollback ... ok
 test test_wasi_adapter_execution_and_rollback ... ok
 test test_expanded_mcp_tools_surface_and_exec ... ok
+test test_transaction_diff_and_diffstat ... ok
+test test_bundle_crc32_tamper_detection ... ok
+test test_bundle_export_import_and_commit ... ok
+test test_bundle_with_multiple_participants ... ok
 test test_daemon_in_memory_ipc_throughput ... ok
 test test_wal_append_latency_benchmark ... ok
 test test_end_to_end_2pc_transaction_throughput ... ok
 
-test result: ok. 45 passed; 0 failed; 0 ignored; finished in 2.38s
+test result: ok. 49 passed; 0 failed; 0 ignored; finished in 2.45s
 ```
 
 ---
