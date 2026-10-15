@@ -455,3 +455,19 @@ impl ResourceManager for GitAdapter {
         Ok(())
     }
 }
+
+/// Reconstruct standard concrete adapters based on ParticipantId naming conventions.
+pub fn reconstruct_adapters(participants: &[ParticipantId]) -> Vec<Box<dyn ResourceManager>> {
+    participants
+        .iter()
+        .map(|p| -> Box<dyn ResourceManager> {
+            if p.0.starts_with("fs_") {
+                Box::new(FsAdapter::new(p.0.clone()))
+            } else if p.0.starts_with("cmd_") {
+                Box::new(CommandAdapter::new(p.0.clone()))
+            } else {
+                Box::new(ApiAdapter::new(p.0.clone()))
+            }
+        })
+        .collect()
+}
