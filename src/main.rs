@@ -264,6 +264,13 @@ enum Commands {
         command: Vec<String>,
     },
 
+    /// Launch real-time web-based transaction monitor HUD
+    Web {
+        /// HTTP bind address (default: 127.0.0.1:9222)
+        #[arg(long, default_value = "127.0.0.1:9222")]
+        addr: String,
+    },
+
     /// Execute a multi-step atomic transaction plan from a batch JSON manifest
     RunBatch {
         /// Path to batch transaction JSON file
@@ -1106,6 +1113,16 @@ fn run_cli(cli: Cli) -> Result<(), TxError> {
                     eprintln!("{}", report.stderr);
                 }
             }
+        }
+
+        Commands::Web { addr } => {
+            println!(
+                "{} Launching agent-2pc Web HUD on {}",
+                "⚡".green().bold(),
+                format!("http://{}", addr).cyan().bold()
+            );
+            let server = agent_2pc::web_hud::WebHudServer::new(tx_dir, addr);
+            server.serve()?;
         }
 
         Commands::RunBatch { file } => {
