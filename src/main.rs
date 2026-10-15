@@ -204,6 +204,9 @@ enum Commands {
     /// Run crash recovery scan on WAL to resolve orphaned transactions
     Recover,
 
+    /// Compact WAL by purging finalized transactions while preserving active in-flight state
+    Compact,
+
     /// Execute a multi-step atomic transaction plan from a batch JSON manifest
     RunBatch {
         /// Path to batch transaction JSON file
@@ -825,6 +828,27 @@ fn run_cli(cli: Cli) -> Result<(), TxError> {
                 println!("Scanned Records: {}", report.total_records_scanned);
                 println!("Rolled Back:     {}", report.rolled_back.len());
                 println!("Rolled Forward:  {}", report.rolled_forward.len());
+            }
+        }
+
+        Commands::Compact => {
+            let mut coord = Coordinator::new(tx_dir)?;
+            let report = coord.compact()?;
+            if cli.json {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            } else {
+                println!("{} WAL Compaction Complete", "✔".green().bold());
+                println!("Original Size:        {} bytes ({} records)", report.original_bytes, report.original_records);
+                println!("Compacted Size:       {} bytes ({} records)", report.compacted_bytes, report.compacted_records);
+                let saved = report.original_bytes.saturating_sub(report.compacted_bytes);
+                let pct = if report.original_bytes > 0 {
+                    (saved as f64 / report.original_bytes as f64) * 100.0
+                } else {
+                    0.0
+                };
+                println!("Disk Space Reclaimed: {} bytes ({:.1}%)", saved, pct);
+                println!("Active Preserved:     {}", report.active_transactions);
+                println!("Finalized Purged:     {}", report.purged_transactions);
             }
         }
 
