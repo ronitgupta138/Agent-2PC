@@ -125,14 +125,6 @@ impl TransactionDiffer {
             let staged_payload = stage_dir.join("staged_payload");
             let staged_patch = stage_dir.join("staged_patch");
 
-            let staged_content = if staged_payload.exists() {
-                fs::read_to_string(&staged_payload).unwrap_or_default()
-            } else if staged_patch.exists() {
-                fs::read_to_string(&staged_patch).unwrap_or_default()
-            } else {
-                continue;
-            };
-
             // Read original content from backup or target path
             let original_content = if let Some(backup) = receipt.backup_paths.first() {
                 if backup.exists() {
@@ -146,6 +138,24 @@ impl TransactionDiffer {
                 fs::read_to_string(&target_path).unwrap_or_default()
             } else {
                 String::new()
+            };
+
+            let staged_content = if staged_payload.exists() {
+                fs::read_to_string(&staged_payload).unwrap_or_default()
+            } else if staged_patch.exists() {
+                let patch = fs::read_to_string(&staged_patch).unwrap_or_default();
+                if original_content.is_empty() {
+                    patch
+                } else {
+                    let mut s = original_content.clone();
+                    if !s.ends_with('\n') {
+                        s.push('\n');
+                    }
+                    s.push_str(&patch);
+                    s
+                }
+            } else {
+                continue;
             };
 
             let is_new = original_content.is_empty() && !target_path.exists();

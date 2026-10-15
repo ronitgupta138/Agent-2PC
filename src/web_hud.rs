@@ -83,7 +83,7 @@ pub const DASHBOARD_HTML: &str = r#"<!DOCTYPE html>
 <body>
   <div class="header">
     <div class="title"><span class="pulse"></span> agent-2pc Live Hypervisor HUD</div>
-    <div class="badge">v1.6.0</div>
+    <div class="badge">v2.0.0</div>
   </div>
 
   <div class="stats-grid">

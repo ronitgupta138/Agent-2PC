@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="agent-2pc",
-    version="1.0.0",
+    version="2.0.0",
     packages=find_packages(),
     author="Ronit Gupta",
     author_email="ronitgupta138@gmail.com",

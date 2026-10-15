@@ -96,7 +96,10 @@ impl Daemon {
                 if let Ok(guard) = coord_reaper.lock() {
                     let now = chrono::Utc::now();
                     for tx in guard.active_transactions() {
-                        if tx.state == TxState::Active || tx.state == TxState::Prepared {
+                        if tx.state == TxState::Active
+                            || tx.state == TxState::Preparing
+                            || tx.state == TxState::Prepared
+                        {
                             let expiry = tx.created_at + chrono::Duration::milliseconds(tx.timeout_ms as i64);
                             if now > expiry {
                                 expired.push((tx.tid, tx.clone()));
@@ -105,9 +108,13 @@ impl Daemon {
                     }
                 }
 
-                for (tid, tx) in expired {
-                    if let Ok(mut guard) = coord_reaper.lock() {
-                        let mut adapters = reconstruct_adapters(&tx.participants);
+                for (tid, _tx) in expired {
+                    if let Ok(mut guard) = coord_reaper.lock()
+                        && let Some(current_tx) = guard.get_status(&tid)
+                        && current_tx.state != TxState::Committed
+                        && current_tx.state != TxState::Aborted
+                    {
+                        let mut adapters = reconstruct_adapters(&current_tx.participants);
                         let _ = guard.abort(&tid, "TTL expired by daemon reaper", &mut adapters[..]);
                         reaped_counter.fetch_add(1, Ordering::SeqCst);
                     }
@@ -194,6 +201,7 @@ fn handle_connection(
                 let mut out = serde_json::to_string(&err_resp)?;
                 out.push('\n');
                 let _ = stream.write_all(out.as_bytes());
+                let _ = stream.flush();
                 continue;
             }
         };
@@ -208,6 +216,10 @@ fn handle_connection(
     Ok(())
 }
 
+fn lock_coord(coord: &Arc<Mutex<Coordinator>>) -> std::sync::MutexGuard<'_, Coordinator> {
+    coord.lock().unwrap_or_else(|p| p.into_inner())
+}
+
 fn dispatch_request(
     req: &IpcRequest,
     coord: &Arc<Mutex<Coordinator>>,
@@ -218,7 +230,7 @@ fn dispatch_request(
     match req.method.as_str() {
         "ping" => IpcResponse {
             success: true,
-            data: Some(json!({ "status": "ok", "version": "1.3.0" })),
+            data: Some(json!({ "status": "ok", "version": env!("CARGO_PKG_VERSION") })),
             error: None,
         },
 
@@ -233,7 +245,7 @@ fn dispatch_request(
 
         "begin" => {
             let timeout_ms = req.params.get("timeout_ms").and_then(|v| v.as_u64());
-            let mut guard = coord.lock().unwrap();
+            let mut guard = lock_coord(coord);
             match guard.begin(timeout_ms) {
                 Ok(tid) => IpcResponse {
                     success: true,
@@ -282,7 +294,7 @@ fn dispatch_request(
                 create_dirs,
             };
 
-            let mut guard = coord.lock().unwrap();
+            let mut guard = lock_coord(coord);
             match guard.prepare_participant(&tid, &mut adapter, intent) {
                 Ok(ParticipantVote::Prepared(receipt)) => IpcResponse {
                     success: true,
@@ -337,7 +349,7 @@ fn dispatch_request(
                 new_string: new_string.to_string(),
             };
 
-            let mut guard = coord.lock().unwrap();
+            let mut guard = lock_coord(coord);
             match guard.prepare_participant(&tid, &mut adapter, intent) {
                 Ok(ParticipantVote::Prepared(receipt)) => IpcResponse {
                     success: true,
@@ -390,7 +402,7 @@ fn dispatch_request(
                 patch: patch.to_string(),
             };
 
-            let mut guard = coord.lock().unwrap();
+            let mut guard = lock_coord(coord);
             match guard.prepare_participant(&tid, &mut adapter, intent) {
                 Ok(ParticipantVote::Prepared(receipt)) => IpcResponse {
                     success: true,
@@ -444,7 +456,7 @@ fn dispatch_request(
                 env: HashMap::new(),
             };
 
-            let mut guard = coord.lock().unwrap();
+            let mut guard = lock_coord(coord);
             match guard.prepare_participant(&tid, &mut adapter, intent) {
                 Ok(ParticipantVote::Prepared(receipt)) => IpcResponse {
                     success: true,
@@ -501,7 +513,7 @@ fn dispatch_request(
                 compensation_body: None,
             };
 
-            let mut guard = coord.lock().unwrap();
+            let mut guard = lock_coord(coord);
             match guard.prepare_participant(&tid, &mut adapter, intent) {
                 Ok(ParticipantVote::Prepared(receipt)) => IpcResponse {
                     success: true,
@@ -541,7 +553,7 @@ fn dispatch_request(
                 }
             };
 
-            let mut guard = coord.lock().unwrap();
+            let mut guard = lock_coord(coord);
             match guard.savepoint(&tid, name) {
                 Ok(sp) => IpcResponse {
                     success: true,
@@ -571,7 +583,7 @@ fn dispatch_request(
                 }
             };
 
-            let mut guard = coord.lock().unwrap();
+            let mut guard = lock_coord(coord);
             let mut adapters: Vec<Box<dyn ResourceManager>> = match guard.get_status(&tid) {
                 Some(tx) => reconstruct_adapters(&tx.participants),
                 None => {
@@ -615,7 +627,7 @@ fn dispatch_request(
                 }
             };
 
-            let mut guard = coord.lock().unwrap();
+            let mut guard = lock_coord(coord);
             let mut adapters: Vec<Box<dyn ResourceManager>> = match guard.get_status(&tid) {
                 Some(tx) => reconstruct_adapters(&tx.participants),
                 None => {
@@ -659,7 +671,7 @@ fn dispatch_request(
                 }
             };
 
-            let mut guard = coord.lock().unwrap();
+            let mut guard = lock_coord(coord);
             let mut adapters: Vec<Box<dyn ResourceManager>> = match guard.get_status(&tid) {
                 Some(tx) => reconstruct_adapters(&tx.participants),
                 None => {
@@ -692,7 +704,7 @@ fn dispatch_request(
 
         "status" => {
             let tid_str = req.params.get("tid").and_then(|v| v.as_str());
-            let guard = coord.lock().unwrap();
+            let guard = lock_coord(coord);
 
             if let Some(t_str) = tid_str {
                 match TransactionId::parse(t_str) {
@@ -750,11 +762,14 @@ fn dispatch_request(
         }
 
         "reap" => {
-            let mut guard = coord.lock().unwrap();
+            let mut guard = lock_coord(coord);
             let now = chrono::Utc::now();
             let mut expired = Vec::new();
             for tx in guard.active_transactions() {
-                if tx.state == TxState::Active || tx.state == TxState::Prepared {
+                if tx.state == TxState::Active
+                    || tx.state == TxState::Preparing
+                    || tx.state == TxState::Prepared
+                {
                     let expiry = tx.created_at + chrono::Duration::milliseconds(tx.timeout_ms as i64);
                     if now > expiry {
                         expired.push((tx.tid, tx.clone()));
@@ -763,10 +778,15 @@ fn dispatch_request(
             }
 
             let count = expired.len();
-            for (tid, tx) in expired {
-                let mut adapters = reconstruct_adapters(&tx.participants);
-                let _ = guard.abort(&tid, "TTL expired by daemon reap command", &mut adapters[..]);
-                reaped_count.fetch_add(1, Ordering::SeqCst);
+            for (tid, _tx) in expired {
+                if let Some(current_tx) = guard.get_status(&tid)
+                    && current_tx.state != TxState::Committed
+                    && current_tx.state != TxState::Aborted
+                {
+                    let mut adapters = reconstruct_adapters(&current_tx.participants);
+                    let _ = guard.abort(&tid, "TTL expired by daemon reap command", &mut adapters[..]);
+                    reaped_count.fetch_add(1, Ordering::SeqCst);
+                }
             }
 
             IpcResponse {
@@ -795,7 +815,7 @@ fn dispatch_request(
                 }
             };
 
-            let mut guard = coord.lock().unwrap();
+            let mut guard = lock_coord(coord);
             match guard.record_read(&tid, path_str) {
                 Ok(hash) => IpcResponse {
                     success: true,
@@ -816,7 +836,7 @@ fn dispatch_request(
         }
 
         "compact" => {
-            let mut guard = coord.lock().unwrap();
+            let mut guard = lock_coord(coord);
             match guard.compact() {
                 Ok(report) => IpcResponse {
                     success: true,

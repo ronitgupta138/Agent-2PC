@@ -820,19 +820,7 @@ impl McpServer {
                 let tid = TransactionId::parse(tid_str)?;
 
                 let tx = coord.get_status(&tid).ok_or(TxError::TransactionNotFound(tid))?.clone();
-                let mut adapters: Vec<Box<dyn ResourceManager>> = tx
-                    .participants
-                    .iter()
-                    .map(|p| -> Box<dyn ResourceManager> {
-                        if p.0.starts_with("fs_") {
-                            Box::new(FsAdapter::new(p.0.clone()))
-                        } else if p.0.starts_with("cmd_") {
-                            Box::new(CommandAdapter::new(p.0.clone()))
-                        } else {
-                            Box::new(ApiAdapter::new(p.0.clone()))
-                        }
-                    })
-                    .collect();
+                let mut adapters = crate::adapters::reconstruct_adapters(&tx.participants);
 
                 coord.commit(&tid, &mut adapters[..])?;
                 Ok(json!({
@@ -850,19 +838,7 @@ impl McpServer {
                 let tid = TransactionId::parse(tid_str)?;
 
                 let tx = coord.get_status(&tid).ok_or(TxError::TransactionNotFound(tid))?.clone();
-                let mut adapters: Vec<Box<dyn ResourceManager>> = tx
-                    .participants
-                    .iter()
-                    .map(|p| -> Box<dyn ResourceManager> {
-                        if p.0.starts_with("fs_") {
-                            Box::new(FsAdapter::new(p.0.clone()))
-                        } else if p.0.starts_with("cmd_") {
-                            Box::new(CommandAdapter::new(p.0.clone()))
-                        } else {
-                            Box::new(ApiAdapter::new(p.0.clone()))
-                        }
-                    })
-                    .collect();
+                let mut adapters = crate::adapters::reconstruct_adapters(&tx.participants);
 
                 coord.abort(&tid, reason, &mut adapters[..])?;
                 Ok(json!({

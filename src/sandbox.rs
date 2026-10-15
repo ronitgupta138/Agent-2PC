@@ -43,6 +43,12 @@ impl ResourceManager for SandboxAdapter {
                 writable_paths,
                 env,
             } => {
+                if !working_dir.exists() {
+                    return Ok(ParticipantVote::Aborted {
+                        reason: format!("Working directory {} does not exist", working_dir.display()),
+                    });
+                }
+
                 let has_bwrap = Path::new("/usr/bin/bwrap").exists()
                     || Command::new("bwrap").arg("--version").output().map(|o| o.status.success()).unwrap_or(false);
 

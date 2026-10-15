@@ -126,11 +126,14 @@ impl WalWriter {
 
         // Frame format:
         // [4 bytes Magic] [1 byte Version] [4 bytes Payload Len] [4 bytes CRC32] [N bytes Payload]
-        self.file.write_all(&WAL_MAGIC)?;
-        self.file.write_all(&[WAL_VERSION])?;
-        self.file.write_all(&(serialized.len() as u32).to_le_bytes())?;
-        self.file.write_all(&checksum.to_le_bytes())?;
-        self.file.write_all(&serialized)?;
+        let mut frame = Vec::with_capacity(13 + serialized.len());
+        frame.extend_from_slice(&WAL_MAGIC);
+        frame.push(WAL_VERSION);
+        frame.extend_from_slice(&(serialized.len() as u32).to_le_bytes());
+        frame.extend_from_slice(&checksum.to_le_bytes());
+        frame.extend_from_slice(&serialized);
+
+        self.file.write_all(&frame)?;
 
         // Ensure durable on disk
         self.file.sync_all()?;
@@ -178,7 +181,11 @@ impl WalScanner {
             }
 
             let mut version = [0u8; 1];
-            reader.read_exact(&mut version)?;
+            match reader.read_exact(&mut version) {
+                Ok(_) => {}
+                Err(ref e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+                Err(e) => return Err(TxError::Io(e)),
+            }
             if version[0] != WAL_VERSION {
                 return Err(TxError::WalError(format!(
                     "Unsupported WAL version {} at offset {}",
@@ -187,11 +194,27 @@ impl WalScanner {
             }
 
             let mut len_bytes = [0u8; 4];
-            reader.read_exact(&mut len_bytes)?;
+            match reader.read_exact(&mut len_bytes) {
+                Ok(_) => {}
+                Err(ref e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+                Err(e) => return Err(TxError::Io(e)),
+            }
             let payload_len = u32::from_le_bytes(len_bytes) as usize;
 
+            const MAX_PAYLOAD_LEN: usize = 128 * 1024 * 1024;
+            if payload_len > MAX_PAYLOAD_LEN {
+                return Err(TxError::WalError(format!(
+                    "Payload length {} exceeds maximum allowed (128 MB) at offset {}",
+                    payload_len, offset
+                )));
+            }
+
             let mut crc_bytes = [0u8; 4];
-            reader.read_exact(&mut crc_bytes)?;
+            match reader.read_exact(&mut crc_bytes) {
+                Ok(_) => {}
+                Err(ref e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+                Err(e) => return Err(TxError::Io(e)),
+            }
             let expected_crc = u32::from_le_bytes(crc_bytes);
 
             let mut payload_bytes = vec![0u8; payload_len];

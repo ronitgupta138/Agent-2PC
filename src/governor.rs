@@ -48,6 +48,12 @@ impl ResourceManager for GovernorAdapter {
                 timeout_ms,
                 env,
             } => {
+                if !working_dir.exists() {
+                    return Ok(ParticipantVote::Aborted {
+                        reason: format!("Working directory {} does not exist", working_dir.display()),
+                    });
+                }
+
                 let start_time = Instant::now();
                 let max_duration = Duration::from_millis(*timeout_ms);
                 let max_fork_count = *max_forks;
@@ -77,14 +83,18 @@ impl ResourceManager for GovernorAdapter {
                         // 1. Check runtime timeout
                         if start_time.elapsed() > max_duration {
                             // Instant in-kernel freeze
-                            unsafe { libc::kill(-pid, libc::SIGSTOP) };
-                            *trip_reason_clone.lock().unwrap() = format!(
+                            if pid > 1 {
+                                unsafe { libc::kill(-pid, libc::SIGSTOP) };
+                            }
+                            *trip_reason_clone.lock().unwrap_or_else(|p| p.into_inner()) = format!(
                                 "Runtime velocity limit exceeded ({}ms > {}ms limit)",
                                 start_time.elapsed().as_millis(),
                                 max_duration.as_millis()
                             );
                             tripped_clone.store(true, Ordering::SeqCst);
-                            unsafe { libc::kill(-pid, libc::SIGKILL) };
+                            if pid > 1 {
+                                unsafe { libc::kill(-pid, libc::SIGKILL) };
+                            }
                             break;
                         }
 
@@ -95,13 +105,17 @@ impl ResourceManager for GovernorAdapter {
                                 let task_count = entries.count();
                                 if task_count > max_fork_count {
                                     // Freeze process group before destruction spreads
-                                    unsafe { libc::kill(-pid, libc::SIGSTOP) };
-                                    *trip_reason_clone.lock().unwrap() = format!(
+                                    if pid > 1 {
+                                        unsafe { libc::kill(-pid, libc::SIGSTOP) };
+                                    }
+                                    *trip_reason_clone.lock().unwrap_or_else(|p| p.into_inner()) = format!(
                                         "Fork-storm velocity breached: {} concurrent tasks (limit: {})",
                                         task_count, max_fork_count
                                     );
                                     tripped_clone.store(true, Ordering::SeqCst);
-                                    unsafe { libc::kill(-pid, libc::SIGKILL) };
+                                    if pid > 1 {
+                                        unsafe { libc::kill(-pid, libc::SIGKILL) };
+                                    }
                                     break;
                                 }
                         }
@@ -115,7 +129,7 @@ impl ResourceManager for GovernorAdapter {
                 let _ = watchdog.join();
 
                 if tripped.load(Ordering::SeqCst) {
-                    let reason = trip_reason.lock().unwrap().clone();
+                    let reason = trip_reason.lock().unwrap_or_else(|p| p.into_inner()).clone();
                     return Ok(ParticipantVote::Aborted {
                         reason: format!("Velocity Governor Tripped: {}", reason),
                     });

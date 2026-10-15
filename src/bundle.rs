@@ -74,8 +74,11 @@ impl BundleManager {
                         .to_string_lossy()
                         .to_string();
 
-                    let content = fs::read_to_string(entry.path())
-                        .unwrap_or_else(|_| String::from_utf8_lossy(&fs::read(entry.path()).unwrap_or_default()).to_string());
+                    let bytes = fs::read(entry.path())?;
+                    let content = match String::from_utf8(bytes.clone()) {
+                        Ok(s) => s,
+                        Err(_) => String::from_utf8_lossy(&bytes).to_string(),
+                    };
 
                     scratch_files.insert(rel_path, content);
                 }
@@ -153,10 +156,20 @@ impl BundleManager {
         let dest_scratch = coord.scratch_dir().join(tid.to_string());
         fs::create_dir_all(&dest_scratch)?;
 
-        // Restore scratch files
+        // Restore scratch files with path traversal protection
         let mut restored_count = 0;
         for (rel, data) in &payload.scratch_files {
-            let file_dest = dest_scratch.join(rel);
+            let rel_path = Path::new(rel);
+            if rel_path.is_absolute()
+                || rel_path.components().any(|c| matches!(c, std::path::Component::ParentDir | std::path::Component::RootDir | std::path::Component::Prefix(_)))
+            {
+                return Err(TxError::Other(format!(
+                    "Path traversal detected in bundle file entry: {}",
+                    rel
+                )));
+            }
+
+            let file_dest = dest_scratch.join(rel_path);
             if let Some(parent) = file_dest.parent() {
                 fs::create_dir_all(parent)?;
             }

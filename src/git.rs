@@ -98,12 +98,12 @@ impl GitIntegrator {
             }
         };
 
-        let mut in_flight = Vec::new();
-        for tx in coord.active_transactions() {
-            if tx.state == TxState::Active || tx.state == TxState::Prepared {
-                in_flight.push(tx.tid);
-            }
-        }
+        let in_flight: Vec<TransactionId> = coord
+            .active_transactions()
+            .iter()
+            .filter(|tx| tx.state != TxState::Committed && tx.state != TxState::Aborted)
+            .map(|tx| tx.tid)
+            .collect();
 
         if in_flight.is_empty() {
             Ok(HookCheckReport {
@@ -137,7 +137,10 @@ impl GitIntegrator {
         let mut touched_files = Vec::new();
         for receipt in tx.receipts.values() {
             if let Some(target) = receipt.metadata.get("target_path") {
-                touched_files.push(PathBuf::from(target));
+                let p = PathBuf::from(target);
+                if !touched_files.contains(&p) {
+                    touched_files.push(p);
+                }
             }
         }
 

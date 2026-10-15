@@ -141,9 +141,7 @@ impl OverlayRunner {
     }
 
         // Clean up temporary overlay scratch mount (leave upper/work removed, keep staged artifacts safe)
-        let _ = fs::remove_dir_all(&upper_dir);
-        let _ = fs::remove_dir_all(&work_dir);
-        let _ = fs::remove_dir_all(&merged_dir);
+        let _ = fs::remove_dir_all(&tx_scratch);
 
         Ok(OverlayExecReport {
             tid: *tid,

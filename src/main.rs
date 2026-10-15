@@ -1,6 +1,6 @@
 //! agent-2pc CLI: Heterogeneous Two-Phase Commit Coordinator for AI Agent Workflows.
 
-use agent_2pc::adapters::{ApiAdapter, CommandAdapter, FsAdapter, ResourceManager};
+use agent_2pc::adapters::{ApiAdapter, CommandAdapter, FsAdapter, ResourceManager, reconstruct_adapters};
 use agent_2pc::coordinator::Coordinator;
 use agent_2pc::domain::{ParticipantVote, ResourceIntent, TransactionId, TxError};
 use clap::{Parser, Subcommand};
@@ -19,7 +19,7 @@ use std::path::PathBuf;
 )]
 struct Cli {
     /// Custom path to .agent-tx directory
-    #[arg(long, default_value = ".agent-tx")]
+    #[arg(long, global = true, default_value = ".agent-tx")]
     tx_dir: PathBuf,
 
     /// Machine-readable JSON output mode for agent harnesses
@@ -1127,19 +1127,7 @@ fn run_cli(cli: Cli) -> Result<(), TxError> {
                 .ok_or(TxError::TransactionNotFound(tid))?
                 .clone();
 
-            let mut adapters: Vec<Box<dyn ResourceManager>> = tx
-                .participants
-                .iter()
-                .map(|p| -> Box<dyn ResourceManager> {
-                    if p.0.starts_with("fs_") {
-                        Box::new(FsAdapter::new(p.0.clone()))
-                    } else if p.0.starts_with("cmd_") {
-                        Box::new(CommandAdapter::new(p.0.clone()))
-                    } else {
-                        Box::new(ApiAdapter::new(p.0.clone()))
-                    }
-                })
-                .collect();
+            let mut adapters = reconstruct_adapters(&tx.participants);
 
             coord.commit(&tid, &mut adapters[..])?;
 
@@ -1185,19 +1173,7 @@ fn run_cli(cli: Cli) -> Result<(), TxError> {
                 .ok_or(TxError::TransactionNotFound(tid))?
                 .clone();
 
-            let mut adapters: Vec<Box<dyn ResourceManager>> = tx
-                .participants
-                .iter()
-                .map(|p| -> Box<dyn ResourceManager> {
-                    if p.0.starts_with("fs_") {
-                        Box::new(FsAdapter::new(p.0.clone()))
-                    } else if p.0.starts_with("cmd_") {
-                        Box::new(CommandAdapter::new(p.0.clone()))
-                    } else {
-                        Box::new(ApiAdapter::new(p.0.clone()))
-                    }
-                })
-                .collect();
+            let mut adapters = reconstruct_adapters(&tx.participants);
 
             coord.abort(&tid, &reason, &mut adapters[..])?;
 

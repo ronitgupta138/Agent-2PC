@@ -15,7 +15,8 @@ use std::time::Duration;
 /// Remote cluster peer client over TCP socket.
 pub struct ClusterTransportClient {
     endpoint: String,
-    stream: TcpStream,
+    reader: BufReader<TcpStream>,
+    writer: TcpStream,
 }
 
 impl ClusterTransportClient {
@@ -25,19 +26,20 @@ impl ClusterTransportClient {
         let stream = TcpStream::connect(&endpoint)?;
         stream.set_read_timeout(Some(Duration::from_secs(10)))?;
         stream.set_write_timeout(Some(Duration::from_secs(10)))?;
-        Ok(Self { endpoint, stream })
+        let writer = stream.try_clone()?;
+        let reader = BufReader::new(stream);
+        Ok(Self { endpoint, reader, writer })
     }
 
     /// Send a cluster message to the remote peer and await response packet.
     pub fn send_message(&mut self, msg: &ClusterMessage) -> Result<ClusterMessage, TxError> {
         let mut line = serde_json::to_string(msg)?;
         line.push('\n');
-        self.stream.write_all(line.as_bytes())?;
-        self.stream.flush()?;
+        self.writer.write_all(line.as_bytes())?;
+        self.writer.flush()?;
 
-        let mut reader = BufReader::new(&mut self.stream);
         let mut response_line = String::new();
-        reader.read_line(&mut response_line)?;
+        self.reader.read_line(&mut response_line)?;
 
         if response_line.trim().is_empty() {
             return Err(TxError::Other("Empty response from remote cluster peer".into()));

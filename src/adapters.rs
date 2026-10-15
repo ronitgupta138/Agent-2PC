@@ -22,6 +22,8 @@ pub fn reflink_or_copy(src: &Path, dst: &Path) -> std::io::Result<()> {
 
     const FICLONE: libc::c_ulong = 0x40049409;
     let ret = unsafe { libc::ioctl(dst_file.as_raw_fd(), FICLONE, src_file.as_raw_fd()) };
+    drop(dst_file);
+    drop(src_file);
     if ret == 0 {
         return Ok(());
     }
@@ -90,6 +92,25 @@ impl ResourceManager for FsAdapter {
                 content,
                 create_dirs,
             } => {
+                if path.is_dir() {
+                    return Ok(ParticipantVote::Aborted {
+                        reason: format!("Destination path {} is a directory, not a file", path.display()),
+                    });
+                }
+
+                if !*create_dirs
+                    && let Some(parent) = path.parent()
+                    && !parent.as_os_str().is_empty()
+                    && !parent.exists()
+                {
+                    return Ok(ParticipantVote::Aborted {
+                        reason: format!(
+                            "Parent directory {} does not exist and create_dirs is false",
+                            parent.display()
+                        ),
+                    });
+                }
+
                 let staged_file = tx_scratch.join("staged_payload");
                 fs::write(&staged_file, content)?;
 
@@ -113,6 +134,11 @@ impl ResourceManager for FsAdapter {
             }
 
             ResourceIntent::FsPatch { path, patch } => {
+                if path.is_dir() {
+                    return Ok(ParticipantVote::Aborted {
+                        reason: format!("Target path {} is a directory, not a file", path.display()),
+                    });
+                }
                 if !path.exists() {
                     return Ok(ParticipantVote::Aborted {
                         reason: format!("Target file {} does not exist for patch", path.display()),
@@ -145,6 +171,11 @@ impl ResourceManager for FsAdapter {
                 old_string,
                 new_string,
             } => {
+                if path.is_dir() {
+                    return Ok(ParticipantVote::Aborted {
+                        reason: format!("Target path {} is a directory, not a file", path.display()),
+                    });
+                }
                 if !path.exists() {
                     return Ok(ParticipantVote::Aborted {
                         reason: format!("Target file {} does not exist for replace", path.display()),
@@ -227,7 +258,10 @@ impl ResourceManager for FsAdapter {
             // Naive patch replacement or line appends
             original.push('\n');
             original.push_str(&patch_content);
-            fs::write(&target_path, original)?;
+
+            let tmp_sibling = target_path.with_extension(format!("tmp_patch_{}", _tid));
+            fs::write(&tmp_sibling, original)?;
+            fs::rename(&tmp_sibling, &target_path)?;
         } else {
             // Standard file write: atomically copy from staged_payload
             let staged_file = stage_dir.join("staged_payload");
@@ -239,7 +273,7 @@ impl ResourceManager for FsAdapter {
             }
 
             // Write atomically via temporary sibling file
-            let tmp_sibling = target_path.with_extension("tmp_commit");
+            let tmp_sibling = target_path.with_extension(format!("tmp_commit_{}", _tid));
             reflink_or_copy(&staged_file, &tmp_sibling)?;
             fs::rename(&tmp_sibling, &target_path)?;
         }
@@ -304,6 +338,12 @@ impl ResourceManager for CommandAdapter {
                 working_dir,
                 env,
             } => {
+                if !working_dir.exists() {
+                    return Ok(ParticipantVote::Aborted {
+                        reason: format!("Working directory {} does not exist", working_dir.display()),
+                    });
+                }
+
                 let output = Command::new("sh")
                     .arg("-c")
                     .arg(command)
@@ -511,6 +551,16 @@ pub fn reconstruct_adapters(participants: &[ParticipantId]) -> Vec<Box<dyn Resou
                 Box::new(FsAdapter::new(p.0.clone()))
             } else if p.0.starts_with("cmd_") {
                 Box::new(CommandAdapter::new(p.0.clone()))
+            } else if p.0.starts_with("gov_") {
+                Box::new(crate::governor::GovernorAdapter::new(p.0.clone()))
+            } else if p.0.starts_with("vm_") {
+                Box::new(crate::microvm::MicrovmAdapter::new(p.0.clone()))
+            } else if p.0.starts_with("wasi_") {
+                Box::new(crate::wasi::WasiAdapter::new(p.0.clone(), None))
+            } else if p.0.starts_with("sandbox_") {
+                Box::new(crate::sandbox::SandboxAdapter::new(p.0.clone()))
+            } else if p.0.starts_with("git_") {
+                Box::new(GitAdapter::new(p.0.clone()))
             } else {
                 Box::new(ApiAdapter::new(p.0.clone()))
             }

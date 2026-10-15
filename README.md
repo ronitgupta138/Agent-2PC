@@ -15,7 +15,7 @@
 [![Crates.io](https://img.shields.io/badge/crates.io-v2.0.0-0891b2?style=flat-square&labelColor=0a0b0e)](https://crates.io/crates/agent-2pc)
 [![License: MIT](https://img.shields.io/badge/License-MIT-0891b2?style=flat-square&labelColor=0a0b0e)](LICENSE)
 [![Rust: 1.80+](https://img.shields.io/badge/Rust-1.80+-0891b2?style=flat-square&labelColor=0a0b0e)](https://www.rust-lang.org)
-[![Build Status](https://img.shields.io/badge/Tests-53%2F53%20Passing-0891b2?style=flat-square&labelColor=0a0b0e)](#-verification--test-suite)
+[![Build Status](https://img.shields.io/badge/Tests-58%2F58%20Passing-0891b2?style=flat-square&labelColor=0a0b0e)](#-verification--test-suite)
 [![M8ven Score](https://m8ven.ai/badge/mcp/ronitgupta138/agent-2pc)](https://m8ven.ai/mcp/ronitgupta138/agent-2pc?s=readme)
 [![Views](https://hits.sh/github.com/ronitgupta138/agent-2pc.svg?style=flat-square&label=Views&color=0891b2&labelColor=0a0b0e)](https://hits.sh/github.com/ronitgupta138/agent-2pc/)
 [![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa?style=flat-square&labelColor=0a0b0e)](https://github.com/sponsors/ronitgupta138)
@@ -171,6 +171,8 @@ agent-2pc commit --tid "$TID"
 | `agent-2pc git-commit` | Atomically commit 2PC transaction and create Git commit | Unified 1-command 2PC -> Git sync |
 | `agent-2pc stage-cmd` | Verify command in staging directory | Linters, test suites, migrations |
 | `agent-2pc stage-api` | Lease API idempotency token & compensation | Linear/GitHub/Slack mutations |
+| `agent-2pc stage-governed` | Stage command with sliding-window velocity tripwires | Enforce thread/runtime limits & DoS defense |
+| `agent-2pc stage-vm` | Stage command execution inside MicroVM boundary | Hardware-isolated untrusted code execution |
 | `agent-2pc commit` | Atomically materialize all staged actions | All steps verified successfully |
 | `agent-2pc abort` | Deterministically roll back staged changes | Step failure or invariant violation |
 | `agent-2pc savepoint` | Create nested checkpoint in active transaction | Speculative refactor branching |
@@ -203,25 +205,28 @@ agent-2pc commit --tid "$TID"
 }
 ```
 
-### Available MCP Tools:
+### Available MCP Tools (21 Native Tools):
 - `agent_2pc_begin`: Starts a transaction session; returns `tid`.
 - `agent_2pc_record_read`: Registers OCC read-set fingerprint on code files before generating modifications.
 - `agent_2pc_stage_write`: Stages file edits into isolated scratch memory without touching repository code.
 - `agent_2pc_stage_patch`: Stages unified diff patches in scratch memory.
 - `agent_2pc_stage_diff`: Stages targeted substring find-and-replace in scratch memory with uniqueness checks.
-- `agent_2pc_diff`: Inspects unified diff and stats for all staged file modifications in an active transaction before commit.
-- `agent_2pc_export`: Exports an active transaction to a verified portable `.a2pc` bundle for swarm review.
-- `agent_2pc_import`: Imports a verified `.a2pc` bundle into this agent coordinator as a prepared transaction.
 - `agent_2pc_stage_cmd`: Runs syntax checks, tests, or linters in scratch sandbox before commit.
 - `agent_2pc_stage_api`: Reserves external API leases with compensation tokens.
-- `agent_2pc_commit`: Atomically materializes all staged actions across all tools.
-- `agent_2pc_abort`: Deterministically rolls back all staged work if any step fails.
+- `agent_2pc_exec`: Executes arbitrary command and auto-stages any created or modified files into Phase 1.
+- `agent_2pc_overlay_exec`: Executes commands inside ephemeral Linux OverlayFS sandbox.
+- `agent_2pc_daemon_status`: Checks whether the background in-memory UDS daemon is active and responding.
+- `agent_2pc_diff`: Inspects unified diff and stats for all staged file modifications in an active transaction before commit.
 - `agent_2pc_savepoint`: Marks a nested transactional checkpoint for speculative execution.
 - `agent_2pc_rollback_to`: Unwinds staged steps back to a named savepoint without aborting entire transaction.
+- `agent_2pc_export`: Exports an active transaction to a verified portable `.a2pc` bundle for swarm review.
+- `agent_2pc_import`: Imports a verified `.a2pc` bundle into this agent coordinator as a prepared transaction.
 - `agent_2pc_hook_check`: Verifies Git workspace integrity by asserting zero uncommitted transactions exist.
 - `agent_2pc_git_commit`: Atomically materializes 2PC transaction and immediately creates a Git commit.
 - `agent_2pc_compact`: Purges finalized transactions from WAL and emits checkpoint marker.
 - `agent_2pc_status`: Inspects active transactions and receipts count.
+- `agent_2pc_commit`: Atomically materializes all staged actions across all tools.
+- `agent_2pc_abort`: Deterministically rolls back all staged work if any step fails.
 
 ---
 
@@ -370,7 +375,39 @@ cargo test
 ```
 
 ```
-running 37 tests
+running 57 tests
+test test_wal_append_latency_benchmark ... ok
+test test_end_to_end_2pc_transaction_throughput ... ok
+test test_daemon_in_memory_ipc_throughput ... ok
+test test_cluster_coordinator_consensus_evaluation_over_network ... ok
+test test_cluster_network_transport_prepare_and_commit ... ok
+test test_distributed_consensus_all_prepared ... ok
+test test_distributed_consensus_peer_abort ... ok
+test test_compactor_offline_compact_path ... ok
+test test_crash_recovery_from_compacted_wal ... ok
+test test_compaction_preserves_in_flight_transactions ... ok
+test test_compaction_purges_committed_and_aborted ... ok
+test test_crdt_commutativity ... ok
+test test_crdt_deletion_tombstone ... ok
+test test_crdt_concurrent_insertion_convergence ... ok
+test test_daemon_lifecycle_and_ping ... ok
+test test_daemon_transaction_workflow_over_uds ... ok
+test test_daemon_concurrent_clients ... ok
+test test_bundle_crc32_tamper_detection ... ok
+test test_transaction_diff_and_diffstat ... ok
+test test_bundle_export_import_and_commit ... ok
+test test_bundle_with_multiple_participants ... ok
+test test_reconstruct_adapters_extended_coverage ... ok
+test test_bundle_path_traversal_prevention ... ok
+test test_coordinator_parallel_prepare_panic_resilience ... ok
+test test_fs_adapter_directory_and_missing_parent_rejection ... ok
+test test_commit_abort_idempotency ... ok
+test test_exec_runner_failed_command_does_not_stage_and_reverts ... ok
+test test_exec_runner_autostages_new_and_modified_files ... ok
+test test_git_hook_installation_and_clean_check ... ok
+test test_git_hook_detects_in_flight_transactions ... ok
+test test_daemon_reap_ipc_command ... ok
+test test_daemon_ttl_reaper_aborts_expired_transactions ... ok
 test test_reflink_or_copy_snapshot_staging ... ok
 test test_monitor_stats_collection ... ok
 test test_wal_framing_and_crc32_tamper_detection ... ok
@@ -385,46 +422,19 @@ test test_2pc_all_prepared_atomic_commit ... ok
 test test_parallel_prepare_with_short_circuit_abort ... ok
 test test_governor_adapter_timeout_containment ... ok
 test test_mcp_initialize_and_tools_list ... ok
-test test_mcp_begin_stage_commit_flow ... ok
-test test_three_way_merge_non_overlapping_clean ... ok
+test test_mcp_full_tool_surface_execution ... ok
 test test_three_way_merge_overlapping_conflict ... ok
-test test_crdt_commutativity ... ok
-test test_crdt_deletion_tombstone ... ok
-test test_crdt_concurrent_insertion_convergence ... ok
-test test_distributed_consensus_all_prepared ... ok
-test test_distributed_consensus_peer_abort ... ok
-test test_compactor_offline_compact_path ... ok
-test test_crash_recovery_from_compacted_wal ... ok
-test test_compaction_preserves_in_flight_transactions ... ok
-test test_compaction_purges_committed_and_aborted ... ok
+test test_three_way_merge_non_overlapping_clean ... ok
+test test_overlay_runner_execution_and_rollback ... ok
+test test_web_hud_server_http_and_api ... ok
 test test_savepoint_creation_and_isolation ... ok
 test test_savepoint_wal_replay_and_crash_recovery ... ok
 test test_speculative_execution_and_rollback_to_savepoint ... ok
 test test_nested_multiple_savepoints ... ok
-test test_daemon_lifecycle_and_ping ... ok
-test test_daemon_transaction_workflow_over_uds ... ok
-test test_daemon_concurrent_clients ... ok
-test test_exec_runner_autostages_new_and_modified_files ... ok
-test test_exec_runner_failed_command_does_not_stage_and_reverts ... ok
-test test_cluster_coordinator_consensus_evaluation_over_network ... ok
-test test_cluster_network_transport_prepare_and_commit ... ok
-test test_web_hud_server_http_and_api ... ok
-test test_overlay_runner_execution_and_rollback ... ok
 test test_wasi_adapter_execution_and_rollback ... ok
 test test_expanded_mcp_tools_surface_and_exec ... ok
-test test_transaction_diff_and_diffstat ... ok
-test test_bundle_crc32_tamper_detection ... ok
-test test_bundle_export_import_and_commit ... ok
-test test_bundle_with_multiple_participants ... ok
-test test_git_hook_installation_and_clean_check ... ok
-test test_git_hook_detects_in_flight_transactions ... ok
-test test_daemon_reap_ipc_command ... ok
-test test_daemon_ttl_reaper_aborts_expired_transactions ... ok
-test test_daemon_in_memory_ipc_throughput ... ok
-test test_wal_append_latency_benchmark ... ok
-test test_end_to_end_2pc_transaction_throughput ... ok
 
-test result: ok. 53 passed; 0 failed; 0 ignored; finished in 2.58s
+test result: ok. 58 passed; 0 failed; 0 ignored; finished in 2.65s
 ```
 
 ---

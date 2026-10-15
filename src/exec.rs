@@ -77,6 +77,12 @@ impl ExecRunner {
                     let _ = fs::remove_file(path);
                 }
             }
+            // Restore any files deleted by the failed command
+            for (path, (_, original_bytes)) in &before_map {
+                if !after_map.contains_key(path) {
+                    let _ = fs::write(path, original_bytes);
+                }
+            }
             return Ok(ExecReport {
                 tid: *tid,
                 command: cmd_str,
@@ -168,6 +174,14 @@ impl ExecRunner {
         let mut map = HashMap::new();
         for entry in WalkDir::new(root)
             .into_iter()
+            .filter_entry(|e| {
+                let p = e.path();
+                if p.starts_with(ignore_dir) {
+                    return false;
+                }
+                let name = e.file_name().to_string_lossy();
+                name != ".git" && name != "target" && name != "node_modules" && name != ".agent-tx"
+            })
             .filter_map(|e| e.ok())
         {
             let path = entry.path();

@@ -453,14 +453,28 @@ impl Coordinator {
                 handles.push(handle);
             }
 
-            handles.into_iter().map(|h| h.join().unwrap()).collect()
+            handles
+                .into_iter()
+                .map(|h| {
+                    h.join().unwrap_or_else(|_| {
+                        Err(TxError::Other(
+                            "Participant panicked during parallel prepare".into(),
+                        ))
+                    })
+                })
+                .collect()
         });
 
         // Process collected votes and log to WAL
         let mut final_votes = Vec::with_capacity(votes.len());
         for (idx, vote_res) in votes.into_iter().enumerate() {
             let pid = items[idx].0.id().clone();
-            let vote = vote_res?;
+            let vote = match vote_res {
+                Ok(v) => v,
+                Err(e) => ParticipantVote::Aborted {
+                    reason: e.to_string(),
+                },
+            };
 
             match &vote {
                 ParticipantVote::Prepared(receipt) => {
@@ -510,6 +524,13 @@ impl Coordinator {
             .ok_or(TxError::TransactionNotFound(*tid))?
             .clone();
 
+        if tx.state == TxState::Committed {
+            return Ok(());
+        }
+        if tx.state == TxState::Aborted {
+            return Err(TxError::InvalidState(*tid, tx.state, "commit"));
+        }
+
         // Check if all participants voted PREPARED
         if tx.receipts.len() != tx.participants.len() || tx.participants.is_empty() {
             // Cannot commit: missing votes -> must trigger ABORT!
@@ -536,6 +557,8 @@ impl Coordinator {
             t.state = TxState::Committing;
         }
 
+        let mut handled_pids = std::collections::HashSet::new();
+
         // Execute commit on each participant
         for res in resources.iter_mut() {
             let pid = res.id().clone();
@@ -543,8 +566,23 @@ impl Coordinator {
                 res.commit(tid, receipt)?;
                 self.wal.append(&WalPayload::Committed {
                     tid: *tid,
-                    participant_id: pid,
+                    participant_id: pid.clone(),
                 })?;
+                handled_pids.insert(pid);
+            }
+        }
+
+        // Commit any participants not provided in `resources`
+        for (pid, receipt) in &tx.receipts {
+            if !handled_pids.contains(pid) {
+                let mut fallback = crate::adapters::reconstruct_adapters(std::slice::from_ref(pid));
+                if let Some(res) = fallback.first_mut() {
+                    res.commit(tid, receipt)?;
+                    self.wal.append(&WalPayload::Committed {
+                        tid: *tid,
+                        participant_id: pid.clone(),
+                    })?;
+                }
             }
         }
 
@@ -572,6 +610,13 @@ impl Coordinator {
             .ok_or(TxError::TransactionNotFound(*tid))?
             .clone();
 
+        if tx.state == TxState::Committed {
+            return Err(TxError::InvalidState(*tid, tx.state, "abort"));
+        }
+        if tx.state == TxState::Aborted {
+            return Ok(());
+        }
+
         // Write AbortDecision to WAL
         let now = Utc::now();
         self.wal.append(&WalPayload::AbortDecision {
@@ -585,6 +630,8 @@ impl Coordinator {
             t.abort_reason = Some(reason.to_string());
         }
 
+        let mut handled_pids = std::collections::HashSet::new();
+
         // Roll back each participant
         for res in resources.iter_mut() {
             let pid = res.id().clone();
@@ -592,8 +639,37 @@ impl Coordinator {
             res.abort(tid, receipt)?;
             self.wal.append(&WalPayload::Aborted {
                 tid: *tid,
-                participant_id: pid,
+                participant_id: pid.clone(),
             })?;
+            handled_pids.insert(pid);
+        }
+
+        // Roll back any participants not provided in `resources`
+        for pid in &tx.participants {
+            if !handled_pids.contains(pid) {
+                let receipt = tx.receipts.get(pid);
+                let mut fallback = crate::adapters::reconstruct_adapters(std::slice::from_ref(pid));
+                if let Some(res) = fallback.first_mut() {
+                    res.abort(tid, receipt)?;
+                } else if let Some(r) = receipt {
+                    if let Some(target_str) = r.metadata.get("target_path") {
+                        let target_path = PathBuf::from(target_str);
+                        for backup in &r.backup_paths {
+                            if backup.exists() {
+                                let _ = fs::copy(backup, &target_path);
+                            }
+                        }
+                    }
+                    if let Some(stage_dir) = &r.stage_path
+                        && stage_dir.exists() {
+                            let _ = fs::remove_dir_all(stage_dir);
+                    }
+                }
+                self.wal.append(&WalPayload::Aborted {
+                    tid: *tid,
+                    participant_id: pid.clone(),
+                })?;
+            }
         }
 
         // Clean up transaction scratch folder

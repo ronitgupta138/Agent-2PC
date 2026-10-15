@@ -29,7 +29,8 @@ pub struct IpcResponse {
 /// Client connection for communicating with the local agent-2pc daemon.
 pub struct IpcClient {
     socket_path: PathBuf,
-    stream: UnixStream,
+    reader: BufReader<UnixStream>,
+    writer: UnixStream,
 }
 
 impl IpcClient {
@@ -39,7 +40,13 @@ impl IpcClient {
         let stream = UnixStream::connect(&socket_path)?;
         stream.set_read_timeout(Some(Duration::from_secs(5)))?;
         stream.set_write_timeout(Some(Duration::from_secs(5)))?;
-        Ok(Self { socket_path, stream })
+        let writer = stream.try_clone()?;
+        let reader = BufReader::new(stream);
+        Ok(Self {
+            socket_path,
+            reader,
+            writer,
+        })
     }
 
     /// Check if an active daemon is responding to ping over the specified socket path.
@@ -66,12 +73,11 @@ impl IpcClient {
         };
         let mut line = serde_json::to_string(&req)?;
         line.push('\n');
-        self.stream.write_all(line.as_bytes())?;
-        self.stream.flush()?;
+        self.writer.write_all(line.as_bytes())?;
+        self.writer.flush()?;
 
-        let mut reader = BufReader::new(&mut self.stream);
         let mut response_line = String::new();
-        reader.read_line(&mut response_line)?;
+        self.reader.read_line(&mut response_line)?;
 
         if response_line.trim().is_empty() {
             return Err(TxError::Other("Empty response from daemon".into()));

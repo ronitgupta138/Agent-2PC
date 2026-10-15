@@ -44,6 +44,12 @@ impl ResourceManager for MicrovmAdapter {
                 memory_mb,
                 env,
             } => {
+                if !working_dir.exists() {
+                    return Ok(ParticipantVote::Aborted {
+                        reason: format!("Working directory {} does not exist", working_dir.display()),
+                    });
+                }
+
                 let kvm_available = Path::new("/dev/kvm").exists()
                     && fs::metadata("/dev/kvm").is_ok();
 
