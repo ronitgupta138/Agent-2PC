@@ -239,6 +239,14 @@ impl McpServer {
                     },
                     "required": ["tid", "path"]
                 }
+            }),
+            json!({
+                "name": "agent_2pc_compact",
+                "description": "Compact WAL by purging finalized (committed/aborted) transactions while preserving in-flight state.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {}
+                }
             })
         ]
     }
@@ -509,6 +517,11 @@ impl McpServer {
                     "path": path_str,
                     "hash": format!("0x{:08x}", hash)
                 }))
+            }
+
+            "agent_2pc_compact" => {
+                let report = coord.compact()?;
+                Ok(serde_json::to_value(report)?)
             }
 
             unknown => Err(TxError::Other(format!("Unknown tool: {}", unknown))),
