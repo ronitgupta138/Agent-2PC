@@ -27,12 +27,20 @@ fn test_mcp_initialize_and_tools_list() {
     let tools = tools_res["result"]["tools"].as_array().unwrap();
     assert_eq!(tools.len(), 15);
 
-    // Verify all 4 required M8ven / OpenAI hints exist and are boolean across every tool
+    // Verify all 4 required M8ven / OpenAI hints exist at root and in annotations object
     for t in tools {
-        assert!(t.get("readOnlyHint").unwrap().is_boolean());
-        assert!(t.get("destructiveHint").unwrap().is_boolean());
-        assert!(t.get("idempotentHint").unwrap().is_boolean());
-        assert!(t.get("openWorldHint").unwrap().is_boolean());
+        // Root-level hints
+        assert!(t.get("readOnlyHint").unwrap().is_boolean(), "Tool {} missing root readOnlyHint", t["name"]);
+        assert!(t.get("destructiveHint").unwrap().is_boolean(), "Tool {} missing root destructiveHint", t["name"]);
+        assert!(t.get("idempotentHint").unwrap().is_boolean(), "Tool {} missing root idempotentHint", t["name"]);
+        assert!(t.get("openWorldHint").unwrap().is_boolean(), "Tool {} missing root openWorldHint", t["name"]);
+
+        // Standard annotations object hints
+        let ann = t.get("annotations").unwrap_or_else(|| panic!("Tool {} missing annotations object", t["name"])).as_object().unwrap();
+        assert!(ann.get("readOnlyHint").unwrap().is_boolean());
+        assert!(ann.get("destructiveHint").unwrap().is_boolean());
+        assert!(ann.get("idempotentHint").unwrap().is_boolean());
+        assert!(ann.get("openWorldHint").unwrap().is_boolean());
     }
 }
 

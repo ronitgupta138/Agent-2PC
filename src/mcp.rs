@@ -138,6 +138,12 @@ impl McpServer {
                 "destructiveHint": false,
                 "idempotentHint": false,
                 "openWorldHint": false,
+                "annotations": {
+                    "readOnlyHint": false,
+                    "destructiveHint": false,
+                    "idempotentHint": false,
+                    "openWorldHint": false
+                },
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -152,6 +158,12 @@ impl McpServer {
                 "destructiveHint": false,
                 "idempotentHint": true,
                 "openWorldHint": false,
+                "annotations": {
+                    "readOnlyHint": false,
+                    "destructiveHint": false,
+                    "idempotentHint": true,
+                    "openWorldHint": false
+                },
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -170,6 +182,12 @@ impl McpServer {
                 "destructiveHint": false,
                 "idempotentHint": true,
                 "openWorldHint": false,
+                "annotations": {
+                    "readOnlyHint": false,
+                    "destructiveHint": false,
+                    "idempotentHint": true,
+                    "openWorldHint": false
+                },
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -187,6 +205,12 @@ impl McpServer {
                 "destructiveHint": false,
                 "idempotentHint": false,
                 "openWorldHint": true,
+                "annotations": {
+                    "readOnlyHint": false,
+                    "destructiveHint": false,
+                    "idempotentHint": false,
+                    "openWorldHint": true
+                },
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -203,6 +227,12 @@ impl McpServer {
                 "destructiveHint": false,
                 "idempotentHint": true,
                 "openWorldHint": true,
+                "annotations": {
+                    "readOnlyHint": false,
+                    "destructiveHint": false,
+                    "idempotentHint": true,
+                    "openWorldHint": true
+                },
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -222,6 +252,12 @@ impl McpServer {
                 "destructiveHint": false,
                 "idempotentHint": true,
                 "openWorldHint": true,
+                "annotations": {
+                    "readOnlyHint": false,
+                    "destructiveHint": false,
+                    "idempotentHint": true,
+                    "openWorldHint": true
+                },
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -237,6 +273,12 @@ impl McpServer {
                 "destructiveHint": true,
                 "idempotentHint": true,
                 "openWorldHint": true,
+                "annotations": {
+                    "readOnlyHint": false,
+                    "destructiveHint": true,
+                    "idempotentHint": true,
+                    "openWorldHint": true
+                },
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -253,6 +295,12 @@ impl McpServer {
                 "destructiveHint": false,
                 "idempotentHint": true,
                 "openWorldHint": false,
+                "annotations": {
+                    "readOnlyHint": true,
+                    "destructiveHint": false,
+                    "idempotentHint": true,
+                    "openWorldHint": false
+                },
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -267,6 +315,12 @@ impl McpServer {
                 "destructiveHint": false,
                 "idempotentHint": true,
                 "openWorldHint": false,
+                "annotations": {
+                    "readOnlyHint": false,
+                    "destructiveHint": false,
+                    "idempotentHint": true,
+                    "openWorldHint": false
+                },
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -283,6 +337,12 @@ impl McpServer {
                 "destructiveHint": true,
                 "idempotentHint": true,
                 "openWorldHint": false,
+                "annotations": {
+                    "readOnlyHint": false,
+                    "destructiveHint": true,
+                    "idempotentHint": true,
+                    "openWorldHint": false
+                },
                 "inputSchema": {
                     "type": "object",
                     "properties": {}
@@ -295,6 +355,12 @@ impl McpServer {
                 "destructiveHint": false,
                 "idempotentHint": false,
                 "openWorldHint": false,
+                "annotations": {
+                    "readOnlyHint": false,
+                    "destructiveHint": false,
+                    "idempotentHint": false,
+                    "openWorldHint": false
+                },
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -311,6 +377,12 @@ impl McpServer {
                 "destructiveHint": true,
                 "idempotentHint": true,
                 "openWorldHint": false,
+                "annotations": {
+                    "readOnlyHint": false,
+                    "destructiveHint": true,
+                    "idempotentHint": true,
+                    "openWorldHint": false
+                },
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -327,6 +399,12 @@ impl McpServer {
                 "destructiveHint": false,
                 "idempotentHint": false,
                 "openWorldHint": true,
+                "annotations": {
+                    "readOnlyHint": false,
+                    "destructiveHint": false,
+                    "idempotentHint": false,
+                    "openWorldHint": true
+                },
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -344,6 +422,12 @@ impl McpServer {
                 "destructiveHint": false,
                 "idempotentHint": false,
                 "openWorldHint": true,
+                "annotations": {
+                    "readOnlyHint": false,
+                    "destructiveHint": false,
+                    "idempotentHint": false,
+                    "openWorldHint": true
+                },
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -361,6 +445,12 @@ impl McpServer {
                 "destructiveHint": false,
                 "idempotentHint": true,
                 "openWorldHint": false,
+                "annotations": {
+                    "readOnlyHint": true,
+                    "destructiveHint": false,
+                    "idempotentHint": true,
+                    "openWorldHint": false
+                },
                 "inputSchema": {
                     "type": "object",
                     "properties": {}
