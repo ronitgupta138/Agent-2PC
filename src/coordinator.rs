@@ -116,6 +116,9 @@ impl Coordinator {
                     receipt,
                 } => {
                     if let Some(tx) = self.transactions.get_mut(&tid) {
+                        if !tx.participants.contains(&participant_id) {
+                            tx.participants.push(participant_id.clone());
+                        }
                         tx.receipts.insert(participant_id, receipt);
                         if tx.receipts.len() == tx.participants.len() && !tx.participants.is_empty() {
                             tx.state = TxState::Prepared;
@@ -153,7 +156,9 @@ impl Coordinator {
                         tx.state = TxState::Aborted;
                     }
                 }
-                WalPayload::Checkpoint { .. } => {}
+                WalPayload::Checkpoint { active_tids, .. } => {
+                    self.transactions.retain(|tid, _| active_tids.contains(tid));
+                }
             }
         }
         Ok(())
@@ -557,6 +562,20 @@ impl Coordinator {
             .values()
             .filter(|t| t.state != TxState::Committed && t.state != TxState::Aborted)
             .collect()
+    }
+
+    /// Return reference to the entire internal transactions map.
+    pub fn active_transactions_map(&self) -> &HashMap<TransactionId, ActiveTx> {
+        &self.transactions
+    }
+
+    /// Compact WAL by purging historical committed/aborted transactions while preserving in-flight state.
+    pub fn compact(&mut self) -> Result<crate::compactor::CompactionReport, TxError> {
+        let report = crate::compactor::Compactor::compact(&self.base_dir, &self.transactions)?;
+        self.wal = WalWriter::open(&self.wal_path)?;
+        self.transactions.clear();
+        self.replay_wal_into_memory()?;
+        Ok(report)
     }
 
     /// Crash Recovery: Replays WAL to resolve any torn or dangling transactions.
