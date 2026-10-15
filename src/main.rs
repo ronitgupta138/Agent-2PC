@@ -14,7 +14,7 @@ use std::path::PathBuf;
 #[command(
     name = "agent-2pc",
     author = "Ronit Gupta <ronitgupta138@gmail.com>",
-    version = "0.1.0",
+    version,
     about = "Two-Phase Commit (2PC) & Compensating Journaling Engine for AI Agent Tool Execution"
 )]
 struct Cli {
