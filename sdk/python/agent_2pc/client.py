@@ -42,6 +42,31 @@ class TxSession:
         ])
         return res.get("hash", "")
 
+    def savepoint(self, name: str) -> Dict[str, Any]:
+        """Mark a nested transactional checkpoint for speculative execution."""
+        return self.client._run([
+            "savepoint",
+            "--tid", self.tid,
+            "--name", name
+        ])
+
+    def rollback_to(self, name: str) -> Dict[str, Any]:
+        """Unwind staged steps back to a named savepoint without aborting entire transaction."""
+        return self.client._run([
+            "rollback-to",
+            "--tid", self.tid,
+            "--name", name
+        ])
+
+    def exec(self, command: List[str], working_dir: Optional[str] = None) -> Dict[str, Any]:
+        """Execute command and auto-stage any created or modified files into Phase 1."""
+        args = ["exec", "--tid", self.tid]
+        if working_dir:
+            args.extend(["--dir", working_dir])
+        args.append("--")
+        args.extend(command)
+        return self.client._run(args)
+
     def commit(self) -> Dict[str, Any]:
         """Phase 2: Atomically commit all staged operations."""
         if self.committed or self.aborted:

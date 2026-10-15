@@ -40,6 +40,31 @@ export class TxSession {
     return res.hash || "";
   }
 
+  public async savepoint(name: string): Promise<any> {
+    return this.client.execute([
+      "savepoint",
+      "--tid", this.tid,
+      "--name", name
+    ]);
+  }
+
+  public async rollbackTo(name: string): Promise<any> {
+    return this.client.execute([
+      "rollback-to",
+      "--tid", this.tid,
+      "--name", name
+    ]);
+  }
+
+  public async exec(command: string[], workingDir?: string): Promise<any> {
+    const args = ["exec", "--tid", this.tid];
+    if (workingDir) {
+      args.push("--dir", workingDir);
+    }
+    args.push("--", ...command);
+    return this.client.execute(args);
+  }
+
   public async commit(): Promise<any> {
     return this.client.execute(["commit", "--tid", this.tid]);
   }
