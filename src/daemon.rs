@@ -106,7 +106,7 @@ fn handle_connection(
     let reader = BufReader::new(stream.try_clone()?);
 
     for line_res in reader.lines() {
-        let line = match line_res {
+        let line: String = match line_res {
             Ok(l) => l,
             Err(_) => break,
         };

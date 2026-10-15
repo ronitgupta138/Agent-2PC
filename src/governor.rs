@@ -5,6 +5,7 @@ use crate::domain::{
     ParticipantId, ParticipantVote, ResourceIntent, StageReceipt, TransactionId, TxError,
 };
 use std::fs;
+#[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -56,8 +57,9 @@ impl ResourceManager for GovernorAdapter {
                 cmd.arg("-c")
                     .arg(command)
                     .current_dir(working_dir)
-                    .envs(env)
-                    .process_group(0); // Create new process group with PGID == PID
+                    .envs(env);
+                #[cfg(unix)]
+                cmd.process_group(0); // Create new process group with PGID == PID
 
                 let mut child = cmd.spawn()?;
                 let pid = child.id() as i32;

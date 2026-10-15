@@ -23,8 +23,6 @@ jobs:
             os: macos-14
           - target: aarch64-apple-darwin
             os: macos-14
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
 
     steps:
       - name: Checkout code
@@ -48,12 +46,7 @@ jobs:
           set -euo pipefail
 
           BIN_NAME="agent-2pc"
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            BIN_NAME="agent-2pc.exe"
-            ARCHIVE="agent-2pc-${{ github.ref_name }}-${{ matrix.target }}.zip"
-          else
-            ARCHIVE="agent-2pc-${{ github.ref_name }}-${{ matrix.target }}.tar.gz"
-          fi
+          ARCHIVE="agent-2pc-${{ github.ref_name }}-${{ matrix.target }}.tar.gz"
 
           STAGING="agent-2pc-staging"
           rm -rf "${STAGING}"
@@ -63,16 +56,7 @@ jobs:
           if [ -f "README.md" ]; then cp "README.md" "${STAGING}/"; fi
           if [ -f "LICENSE" ]; then cp "LICENSE" "${STAGING}/"; fi
 
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            if command -v 7z >/dev/null 2>&1; then
-              (cd "${STAGING}" && 7z a "../${ARCHIVE}" *)
-            else
-              powershell -Command "Compress-Archive -Path '${STAGING}/*' -DestinationPath '${ARCHIVE}'"
-            fi
-          else
-            (cd "${STAGING}" && tar -czf "../${ARCHIVE}" *)
-          fi
-
+          (cd "${STAGING}" && tar -czf "../${ARCHIVE}" *)
           rm -rf "${STAGING}"
 
       - name: Compute SHA256 checksum
@@ -80,19 +64,13 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            ARCHIVE="agent-2pc-${{ github.ref_name }}-${{ matrix.target }}.zip"
-          else
-            ARCHIVE="agent-2pc-${{ github.ref_name }}-${{ matrix.target }}.tar.gz"
-          fi
+          ARCHIVE="agent-2pc-${{ github.ref_name }}-${{ matrix.target }}.tar.gz"
           CHECKSUM="agent-2pc-${{ github.ref_name }}-${{ matrix.target }}.sha256"
 
           if command -v sha256sum >/dev/null 2>&1; then
             sha256sum "${ARCHIVE}" > "${CHECKSUM}"
-          elif command -v shasum >/dev/null 2>&1; then
-            shasum -a 256 "${ARCHIVE}" > "${CHECKSUM}"
           else
-            powershell -Command "(Get-FileHash -Algorithm SHA256 '${ARCHIVE}').Hash.ToLower() + '  ${ARCHIVE}'" > "${CHECKSUM}"
+            shasum -a 256 "${ARCHIVE}" > "${CHECKSUM}"
           fi
 
           echo "Checksum generated in ${CHECKSUM}:"
