@@ -249,6 +249,21 @@ enum Commands {
         name: String,
     },
 
+    /// Execute arbitrary command and auto-stage any created or modified files into Phase 1
+    Exec {
+        /// Target transaction ID
+        #[arg(long)]
+        tid: String,
+
+        /// Working directory (defaults to current dir)
+        #[arg(long)]
+        dir: Option<PathBuf>,
+
+        /// Command and arguments to execute
+        #[arg(last = true, required = true)]
+        command: Vec<String>,
+    },
+
     /// Execute a multi-step atomic transaction plan from a batch JSON manifest
     RunBatch {
         /// Path to batch transaction JSON file
@@ -1054,6 +1069,42 @@ fn run_cli(cli: Cli) -> Result<(), TxError> {
                     name.cyan().bold()
                 );
                 println!("Unwound Participants: {}", unwound);
+            }
+        }
+
+        Commands::Exec { tid, dir, command } => {
+            let mut coord = Coordinator::new(tx_dir)?;
+            let tid_obj = TransactionId::parse(&tid)?;
+            let working_dir = dir.unwrap_or_else(|| PathBuf::from("."));
+            let report = agent_2pc::exec::ExecRunner::execute_and_stage(
+                &mut coord,
+                &tid_obj,
+                working_dir,
+                &command,
+            )?;
+
+            if cli.json {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            } else if report.exit_code == 0 {
+                println!(
+                    "{} Command `{}` executed successfully (exit code 0)",
+                    "✔".green().bold(),
+                    report.command.cyan()
+                );
+                println!("Auto-staged files ({}):", report.staged_files.len());
+                for f in &report.staged_files {
+                    println!("  • {}", f.display());
+                }
+            } else {
+                println!(
+                    "{} Command `{}` failed with exit code {}",
+                    "✖".red().bold(),
+                    report.command,
+                    report.exit_code
+                );
+                if !report.stderr.is_empty() {
+                    eprintln!("{}", report.stderr);
+                }
             }
         }
 
