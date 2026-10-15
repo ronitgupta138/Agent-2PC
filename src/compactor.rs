@@ -108,6 +108,16 @@ impl Compactor {
                 }
             }
 
+            // Savepoints for in-flight speculative transactions
+            for sp in &tx.savepoints {
+                tmp_writer.append(&WalPayload::Savepoint {
+                    tid: **tid,
+                    name: sp.name.clone(),
+                    timestamp: sp.created_at,
+                })?;
+                compacted_records += 1;
+            }
+
             // In-flight state transitions
             if tx.state == TxState::Committing {
                 tmp_writer.append(&WalPayload::CommitDecision {

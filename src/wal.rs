@@ -71,6 +71,18 @@ pub enum WalPayload {
         active_tids: Vec<TransactionId>,
         timestamp: DateTime<Utc>,
     },
+    /// Transactional savepoint boundary
+    Savepoint {
+        tid: TransactionId,
+        name: String,
+        timestamp: DateTime<Utc>,
+    },
+    /// Rollback active transaction state back to named savepoint
+    RollbackToSavepoint {
+        tid: TransactionId,
+        name: String,
+        timestamp: DateTime<Utc>,
+    },
 }
 
 /// Disk entry containing framing and CRC32 verification.

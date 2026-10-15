@@ -4,6 +4,7 @@ use crate::adapters::ResourceManager;
 use crate::domain::{
     ParticipantId, ParticipantVote, ResourceIntent, StageReceipt, TransactionId, TxError, TxState,
 };
+use crate::savepoint::Savepoint;
 use crate::wal::{WalPayload, WalScanner, WalWriter};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -24,6 +25,7 @@ pub struct ActiveTx {
     pub receipts: HashMap<ParticipantId, StageReceipt>,
     pub read_set: HashMap<PathBuf, u32>,
     pub abort_reason: Option<String>,
+    pub savepoints: Vec<Savepoint>,
 }
 
 /// Summary report after crash recovery scan.
@@ -91,6 +93,7 @@ impl Coordinator {
                             receipts: HashMap::new(),
                             read_set: HashMap::new(),
                             abort_reason: None,
+                            savepoints: Vec::new(),
                         },
                     );
                 }
@@ -159,6 +162,32 @@ impl Coordinator {
                 WalPayload::Checkpoint { active_tids, .. } => {
                     self.transactions.retain(|tid, _| active_tids.contains(tid));
                 }
+                WalPayload::Savepoint { tid, name, timestamp } => {
+                    if let Some(tx) = self.transactions.get_mut(&tid) {
+                        tx.savepoints.push(Savepoint {
+                            name,
+                            participant_count: tx.participants.len(),
+                            receipt_count: tx.receipts.len(),
+                            created_at: timestamp,
+                        });
+                    }
+                }
+                WalPayload::RollbackToSavepoint { tid, name, .. } => {
+                    if let Some(tx) = self.transactions.get_mut(&tid)
+                        && let Some(sp_idx) = tx.savepoints.iter().position(|sp| sp.name == name) {
+                            let sp = tx.savepoints[sp_idx].clone();
+                            tx.participants.truncate(sp.participant_count);
+                            tx.receipts.retain(|pid, _| tx.participants.contains(pid));
+                            tx.savepoints.truncate(sp_idx + 1);
+                            if tx.participants.is_empty() {
+                                tx.state = TxState::Active;
+                            } else if tx.receipts.len() == tx.participants.len() {
+                                tx.state = TxState::Prepared;
+                            } else {
+                                tx.state = TxState::Preparing;
+                            }
+                    }
+                }
             }
         }
         Ok(())
@@ -192,6 +221,7 @@ impl Coordinator {
                 receipts: HashMap::new(),
                 read_set: HashMap::new(),
                 abort_reason: None,
+                savepoints: Vec::new(),
             },
         );
 
@@ -576,6 +606,126 @@ impl Coordinator {
         self.transactions.clear();
         self.replay_wal_into_memory()?;
         Ok(report)
+    }
+
+    /// Create a transactional savepoint checkpoint within an active transaction.
+    pub fn savepoint(&mut self, tid: &TransactionId, name: &str) -> Result<Savepoint, TxError> {
+        let tx = self
+            .transactions
+            .get_mut(tid)
+            .ok_or(TxError::TransactionNotFound(*tid))?;
+
+        if tx.state != TxState::Active && tx.state != TxState::Preparing && tx.state != TxState::Prepared {
+            return Err(TxError::InvalidState(*tid, tx.state, "savepoint"));
+        }
+
+        if tx.savepoints.iter().any(|sp| sp.name == name) {
+            return Err(TxError::Other(format!(
+                "Savepoint '{}' already exists in transaction {}",
+                name, tid
+            )));
+        }
+
+        let sp = Savepoint::new(name, tx.participants.len(), tx.receipts.len());
+
+        self.wal.append(&WalPayload::Savepoint {
+            tid: *tid,
+            name: name.to_string(),
+            timestamp: sp.created_at,
+        })?;
+
+        tx.savepoints.push(sp.clone());
+        Ok(sp)
+    }
+
+    /// Roll back transaction changes staged after the specified savepoint.
+    pub fn rollback_to(
+        &mut self,
+        tid: &TransactionId,
+        name: &str,
+        resources: &mut [Box<dyn ResourceManager>],
+    ) -> Result<usize, TxError> {
+        let tx = self
+            .transactions
+            .get(tid)
+            .ok_or(TxError::TransactionNotFound(*tid))?
+            .clone();
+
+        if tx.state == TxState::Committed || tx.state == TxState::Aborted {
+            return Err(TxError::InvalidState(*tid, tx.state, "rollback_to"));
+        }
+
+        let sp_idx = tx
+            .savepoints
+            .iter()
+            .position(|sp| sp.name == name)
+            .ok_or_else(|| {
+                TxError::Other(format!("Savepoint '{}' not found in transaction {}", name, tid))
+            })?;
+
+        let sp = &tx.savepoints[sp_idx];
+        let unwound_pids: Vec<ParticipantId> = tx.participants[sp.participant_count..].to_vec();
+
+        // Roll back each unwound participant
+        for pid in &unwound_pids {
+            let receipt = tx.receipts.get(pid);
+
+            // Find matching adapter in passed resources
+            let mut handled = false;
+            for res in resources.iter_mut() {
+                if res.id() == pid {
+                    res.abort(tid, receipt)?;
+                    handled = true;
+                    break;
+                }
+            }
+
+            // Fallback: if not in resources, clean up receipt stage directory and restore backups directly
+            if !handled
+                && let Some(r) = receipt {
+                    if let Some(target_str) = r.metadata.get("target_path") {
+                        let target_path = PathBuf::from(target_str);
+                        for backup in &r.backup_paths {
+                            if backup.exists() {
+                                let _ = fs::copy(backup, &target_path);
+                            }
+                        }
+                    }
+                    if let Some(stage_dir) = &r.stage_path
+                        && stage_dir.exists() {
+                            let _ = fs::remove_dir_all(stage_dir);
+                    }
+            }
+
+            self.wal.append(&WalPayload::Aborted {
+                tid: *tid,
+                participant_id: pid.clone(),
+            })?;
+        }
+
+        self.wal.append(&WalPayload::RollbackToSavepoint {
+            tid: *tid,
+            name: name.to_string(),
+            timestamp: Utc::now(),
+        })?;
+
+        let unwound_count = unwound_pids.len();
+
+        if let Some(t) = self.transactions.get_mut(tid) {
+            t.participants.truncate(sp.participant_count);
+            t.receipts.retain(|pid, _| t.participants.contains(pid));
+            t.savepoints.truncate(sp_idx + 1);
+
+            if t.participants.is_empty() {
+                t.state = TxState::Active;
+            } else if t.receipts.len() == t.participants.len() {
+                t.state = TxState::Prepared;
+            } else {
+                t.state = TxState::Preparing;
+            }
+        }
+
+        Ok(unwound_count)
     }
 
     /// Crash Recovery: Replays WAL to resolve any torn or dangling transactions.
