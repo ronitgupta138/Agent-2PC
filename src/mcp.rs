@@ -271,6 +271,40 @@ impl McpServer {
                     },
                     "required": ["tid", "name"]
                 }
+            }),
+            json!({
+                "name": "agent_2pc_exec",
+                "description": "Execute a shell command and automatically stage any created or modified files into Phase 1.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "tid": { "type": "string", "description": "Active Transaction ID" },
+                        "command": { "type": "string", "description": "Command string to execute" },
+                        "dir": { "type": "string", "description": "Working directory (defaults to current dir)" }
+                    },
+                    "required": ["tid", "command"]
+                }
+            }),
+            json!({
+                "name": "agent_2pc_overlay_exec",
+                "description": "Execute a command inside an ephemeral kernel OverlayFS sandbox with sub-50µs rollbacks.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "tid": { "type": "string", "description": "Active Transaction ID" },
+                        "command": { "type": "string", "description": "Command string to execute" },
+                        "dir": { "type": "string", "description": "Working directory (defaults to current dir)" }
+                    },
+                    "required": ["tid", "command"]
+                }
+            }),
+            json!({
+                "name": "agent_2pc_daemon_status",
+                "description": "Check whether the background in-memory UDS daemon is active and responding.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {}
+                }
             })
         ]
     }
@@ -577,6 +611,59 @@ impl McpServer {
                     "tid": tid_str,
                     "savepoint": name_str,
                     "unwound_participants": unwound
+                }))
+            }
+
+            "agent_2pc_exec" => {
+                let tid_str = args.get("tid").and_then(|v| v.as_str()).ok_or_else(|| {
+                    TxError::Other("Missing required argument: tid".into())
+                })?;
+                let cmd_str = args.get("command").and_then(|v| v.as_str()).ok_or_else(|| {
+                    TxError::Other("Missing required argument: command".into())
+                })?;
+                let dir_str = args.get("dir").and_then(|v| v.as_str());
+
+                let tid = TransactionId::parse(tid_str)?;
+                let working_dir = dir_str.map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
+                let cmd_parts = vec![cmd_str.to_string()];
+
+                let report = crate::exec::ExecRunner::execute_and_stage(
+                    &mut coord,
+                    &tid,
+                    working_dir,
+                    &cmd_parts,
+                )?;
+                Ok(serde_json::to_value(report)?)
+            }
+
+            "agent_2pc_overlay_exec" => {
+                let tid_str = args.get("tid").and_then(|v| v.as_str()).ok_or_else(|| {
+                    TxError::Other("Missing required argument: tid".into())
+                })?;
+                let cmd_str = args.get("command").and_then(|v| v.as_str()).ok_or_else(|| {
+                    TxError::Other("Missing required argument: command".into())
+                })?;
+                let dir_str = args.get("dir").and_then(|v| v.as_str());
+
+                let tid = TransactionId::parse(tid_str)?;
+                let working_dir = dir_str.map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
+                let cmd_parts = vec![cmd_str.to_string()];
+
+                let report = crate::overlay::OverlayRunner::execute_and_stage(
+                    &mut coord,
+                    &tid,
+                    working_dir,
+                    &cmd_parts,
+                )?;
+                Ok(serde_json::to_value(report)?)
+            }
+
+            "agent_2pc_daemon_status" => {
+                let sock_path = self.tx_dir.join("agent-2pc.sock");
+                let alive = crate::ipc::IpcClient::is_alive(&sock_path);
+                Ok(json!({
+                    "alive": alive,
+                    "socket": sock_path.display().to_string()
                 }))
             }
 
