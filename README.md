@@ -12,10 +12,10 @@
 ### **Two-Phase Commit & Compensating Journaling Engine for AI Agent Tool Execution**
 
 [![GitHub Stars](https://img.shields.io/github/stars/ronitgupta138/agent-2pc?style=flat-square&color=0891b2&labelColor=0a0b0e)](https://github.com/ronitgupta138/agent-2pc/stargazers)
-[![Crates.io](https://img.shields.io/badge/crates.io-v1.0.0-0891b2?style=flat-square&labelColor=0a0b0e)](https://crates.io/crates/agent-2pc)
+[![Crates.io](https://img.shields.io/badge/crates.io-v1.1.0-0891b2?style=flat-square&labelColor=0a0b0e)](https://crates.io/crates/agent-2pc)
 [![License: MIT](https://img.shields.io/badge/License-MIT-0891b2?style=flat-square&labelColor=0a0b0e)](LICENSE)
 [![Rust: 1.80+](https://img.shields.io/badge/Rust-1.80+-0891b2?style=flat-square&labelColor=0a0b0e)](https://www.rust-lang.org)
-[![Build Status](https://img.shields.io/badge/Tests-24%2F24%20Passing-0891b2?style=flat-square&labelColor=0a0b0e)](#-verification--test-suite)
+[![Build Status](https://img.shields.io/badge/Tests-28%2F28%20Passing-0891b2?style=flat-square&labelColor=0a0b0e)](#-verification--test-suite)
 [![M8ven Score](https://m8ven.ai/badge/mcp/ronitgupta138/agent-2pc)](https://m8ven.ai/mcp/ronitgupta138/agent-2pc?s=readme)
 [![Views](https://hits.sh/github.com/ronitgupta138/agent-2pc.svg?style=flat-square&label=Views&color=0891b2&labelColor=0a0b0e)](https://hits.sh/github.com/ronitgupta138/agent-2pc/)
 [![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa?style=flat-square&labelColor=0a0b0e)](https://github.com/sponsors/ronitgupta138)
@@ -167,6 +167,7 @@ agent-2pc commit --tid "$TID"
 | `agent-2pc merge` | Three-way non-overlapping reconciliation | Concurrent agent edits |
 | `agent-2pc top` / `monitor` | Live HUD (`--watch` for continuous auto-refresh)| Real-time developer observability |
 | `agent-2pc recover` | Scan WAL and resolve uncommitted crashes | Post-crash startup recovery |
+| `agent-2pc compact` | Zero-downtime log compaction & checkpointing | Purge finalized tx, reclaim disk |
 | `agent-2pc mcp` | Zero-dependency JSON-RPC 2.0 stdio server | Claude Desktop, Cursor, Hermes |
 | `agent-2pc run-batch` | One-shot atomic execution from JSON manifest | Scripted multi-step workflows |
 
@@ -197,6 +198,7 @@ agent-2pc commit --tid "$TID"
 - `agent_2pc_stage_api`: Reserves external API leases with compensation tokens.
 - `agent_2pc_commit`: Atomically materializes all staged actions across all tools.
 - `agent_2pc_abort`: Deterministically rolls back all staged work if any step fails.
+- `agent_2pc_compact`: Purges finalized transactions from WAL and emits checkpoint marker.
 - `agent_2pc_status`: Inspects active transactions and receipts count.
 
 ---
@@ -346,7 +348,7 @@ cargo test
 ```
 
 ```
-running 24 tests
+running 28 tests
 test test_reflink_or_copy_snapshot_staging ... ok
 test test_monitor_stats_collection ... ok
 test test_wal_framing_and_crc32_tamper_detection ... ok
@@ -369,10 +371,14 @@ test test_crdt_deletion_tombstone ... ok
 test test_crdt_concurrent_insertion_convergence ... ok
 test test_distributed_consensus_all_prepared ... ok
 test test_distributed_consensus_peer_abort ... ok
+test test_compactor_offline_compact_path ... ok
+test test_crash_recovery_from_compacted_wal ... ok
+test test_compaction_preserves_in_flight_transactions ... ok
+test test_compaction_purges_committed_and_aborted ... ok
 test test_wal_append_latency_benchmark ... ok
 test test_end_to_end_2pc_transaction_throughput ... ok
 
-test result: ok. 24 passed; 0 failed; 0 ignored; finished in 1.91s
+test result: ok. 28 passed; 0 failed; 0 ignored; finished in 1.95s
 ```
 
 ---
