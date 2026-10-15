@@ -21,76 +21,131 @@ fn test_mcp_initialize_and_tools_list() {
 
     let init_res: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
     assert_eq!(init_res["result"]["serverInfo"]["name"], "agent-2pc");
-    assert_eq!(init_res["result"]["serverInfo"]["version"], "0.2.0");
+    assert_eq!(init_res["result"]["serverInfo"]["version"], env!("CARGO_PKG_VERSION"));
 
     let tools_res: serde_json::Value = serde_json::from_str(lines[1]).unwrap();
     let tools = tools_res["result"]["tools"].as_array().unwrap();
-    assert!(tools.len() >= 6);
+    assert_eq!(tools.len(), 15);
+
+    // Verify all 4 required M8ven / OpenAI hints exist and are boolean across every tool
+    for t in tools {
+        assert!(t.get("readOnlyHint").unwrap().is_boolean());
+        assert!(t.get("destructiveHint").unwrap().is_boolean());
+        assert!(t.get("idempotentHint").unwrap().is_boolean());
+        assert!(t.get("openWorldHint").unwrap().is_boolean());
+    }
 }
 
 #[test]
-fn test_mcp_begin_stage_commit_flow() {
+fn test_mcp_full_tool_surface_execution() {
     let tmp = tempdir().unwrap();
     let mcp = McpServer::new(tmp.path().join(".agent-tx"));
-    let target_file = tmp.path().join("mcp_output.txt");
+    let target_file = tmp.path().join("mcp_full_test.txt");
+    fs::write(&target_file, "original content\n").unwrap();
 
-    // 1. Begin
-    let begin_req = json!({
-        "jsonrpc": "2.0",
-        "id": 10,
-        "method": "tools/call",
-        "params": {
-            "name": "agent_2pc_begin",
-            "arguments": { "timeout_ms": 15000 }
-        }
-    });
+    // 1. agent_2pc_begin
+    let begin_res = mcp.call_tool("agent_2pc_begin", &json!({ "timeout_ms": 30000 })).unwrap();
+    let tid = begin_res.get("tid").unwrap().as_str().unwrap();
 
-    let mut begin_out = Vec::new();
-    mcp.run_loop(Cursor::new(serde_json::to_string(&begin_req).unwrap() + "\n"), &mut begin_out).unwrap();
-    let begin_res: serde_json::Value = serde_json::from_slice(&begin_out).unwrap();
-    let begin_text = begin_res["result"]["content"][0]["text"].as_str().unwrap();
-    let begin_payload: serde_json::Value = serde_json::from_str(begin_text).unwrap();
-    let tid = begin_payload["tid"].as_str().unwrap();
+    // 2. agent_2pc_record_read
+    let read_res = mcp.call_tool("agent_2pc_record_read", &json!({
+        "tid": tid,
+        "path": target_file.to_str().unwrap()
+    })).unwrap();
+    assert!(read_res.get("hash").is_some());
 
-    // 2. Stage write
-    let stage_req = json!({
-        "jsonrpc": "2.0",
-        "id": 11,
-        "method": "tools/call",
-        "params": {
-            "name": "agent_2pc_stage_write",
-            "arguments": {
-                "tid": tid,
-                "path": target_file.to_string_lossy(),
-                "content": "Content written via native Rust MCP server!"
-            }
-        }
-    });
+    // 3. agent_2pc_stage_write
+    let write_res = mcp.call_tool("agent_2pc_stage_write", &json!({
+        "tid": tid,
+        "path": target_file.to_str().unwrap(),
+        "content": "staged overwrite\n",
+        "create_dirs": true
+    })).unwrap();
+    assert_eq!(write_res.get("vote").unwrap().as_str().unwrap(), "PREPARED");
 
-    let mut stage_out = Vec::new();
-    mcp.run_loop(Cursor::new(serde_json::to_string(&stage_req).unwrap() + "\n"), &mut stage_out).unwrap();
+    // 4. agent_2pc_savepoint
+    let sp_res = mcp.call_tool("agent_2pc_savepoint", &json!({
+        "tid": tid,
+        "name": "sp1"
+    })).unwrap();
+    assert_eq!(sp_res.get("name").unwrap().as_str().unwrap(), "sp1");
 
-    // Target file must NOT exist before commit
-    assert!(!target_file.exists());
+    // 5. agent_2pc_stage_patch
+    let patch_file = tmp.path().join("patch_target.txt");
+    fs::write(&patch_file, "line1\nline2\n").unwrap();
+    let patch_res = mcp.call_tool("agent_2pc_stage_patch", &json!({
+        "tid": tid,
+        "path": patch_file.to_str().unwrap(),
+        "patch": "line3\n"
+    })).unwrap();
+    assert_eq!(patch_res.get("vote").unwrap().as_str().unwrap(), "PREPARED");
 
-    // 3. Commit
-    let commit_req = json!({
-        "jsonrpc": "2.0",
-        "id": 12,
-        "method": "tools/call",
-        "params": {
-            "name": "agent_2pc_commit",
-            "arguments": { "tid": tid }
-        }
-    });
+    // 6. agent_2pc_stage_cmd
+    let cmd_res = mcp.call_tool("agent_2pc_stage_cmd", &json!({
+        "tid": tid,
+        "command": "true"
+    })).unwrap();
+    assert_eq!(cmd_res.get("vote").unwrap().as_str().unwrap(), "PREPARED");
 
-    let mut commit_out = Vec::new();
-    mcp.run_loop(Cursor::new(serde_json::to_string(&commit_req).unwrap() + "\n"), &mut commit_out).unwrap();
+    // 7. agent_2pc_stage_api
+    let api_res = mcp.call_tool("agent_2pc_stage_api", &json!({
+        "tid": tid,
+        "endpoint": "https://api.example.com/v1/mutate"
+    })).unwrap();
+    assert_eq!(api_res.get("vote").unwrap().as_str().unwrap(), "PREPARED");
 
-    // Target file MUST exist after commit
-    assert!(target_file.exists());
-    assert_eq!(
-        fs::read_to_string(&target_file).unwrap(),
-        "Content written via native Rust MCP server!"
-    );
+    // 8. agent_2pc_rollback_to (unwinds patch, cmd, and api, keeps write at sp1)
+    let unwound_res = mcp.call_tool("agent_2pc_rollback_to", &json!({
+        "tid": tid,
+        "name": "sp1"
+    })).unwrap();
+    assert_eq!(unwound_res.get("unwound_participants").unwrap().as_u64().unwrap(), 3);
+
+    // 9. agent_2pc_status
+    let status_res = mcp.call_tool("agent_2pc_status", &json!({ "tid": tid })).unwrap();
+    assert_eq!(status_res.get("tid").unwrap().as_str().unwrap(), tid);
+
+    // 10. agent_2pc_daemon_status
+    let daemon_res = mcp.call_tool("agent_2pc_daemon_status", &json!({})).unwrap();
+    assert!(daemon_res.get("socket").is_some());
+
+    // 11. agent_2pc_commit
+    let commit_res = mcp.call_tool("agent_2pc_commit", &json!({ "tid": tid })).unwrap();
+    assert_eq!(commit_res.get("decision").unwrap().as_str().unwrap(), "COMMITTED");
+    assert_eq!(fs::read_to_string(&target_file).unwrap(), "staged overwrite\n");
+
+    // 12. agent_2pc_compact
+    let compact_res = mcp.call_tool("agent_2pc_compact", &json!({})).unwrap();
+    assert!(compact_res.get("compacted_records").is_some());
+
+    // 13. agent_2pc_abort flow
+    let abort_tid_res = mcp.call_tool("agent_2pc_begin", &json!({})).unwrap();
+    let abort_tid = abort_tid_res.get("tid").unwrap().as_str().unwrap();
+    let abort_res = mcp.call_tool("agent_2pc_abort", &json!({
+        "tid": abort_tid,
+        "reason": "Test abort verification"
+    })).unwrap();
+    assert_eq!(abort_res.get("decision").unwrap().as_str().unwrap(), "ABORTED");
+
+    // 14. agent_2pc_exec
+    let exec_tid_res = mcp.call_tool("agent_2pc_begin", &json!({})).unwrap();
+    let exec_tid = exec_tid_res.get("tid").unwrap().as_str().unwrap();
+    let exec_out_file = tmp.path().join("exec_out.txt");
+    let exec_res = mcp.call_tool("agent_2pc_exec", &json!({
+        "tid": exec_tid,
+        "command": format!("echo 'exec tool verified' > {}", exec_out_file.display()),
+        "dir": tmp.path().to_str().unwrap()
+    })).unwrap();
+    assert_eq!(exec_res.get("exit_code").unwrap().as_i64().unwrap(), 0);
+
+    // 15. agent_2pc_overlay_exec
+    if agent_2pc::overlay::OverlayRunner::is_supported() {
+        let ovl_tid_res = mcp.call_tool("agent_2pc_begin", &json!({})).unwrap();
+        let ovl_tid = ovl_tid_res.get("tid").unwrap().as_str().unwrap();
+        let _ = mcp.call_tool("agent_2pc_overlay_exec", &json!({
+            "tid": ovl_tid,
+            "command": "true",
+            "dir": tmp.path().to_str().unwrap()
+        }));
+    }
 }
