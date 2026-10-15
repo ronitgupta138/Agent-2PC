@@ -1,6 +1,6 @@
 [package]
 name = "agent-2pc"
-version = "1.5.0"
+version = "1.6.0"
 edition = "2024"
 authors = ["Ronit Gupta <ronitgupta138@gmail.com>"]
 description = "Heterogeneous Two-Phase Commit (2PC) & Compensating Journaling Engine for AI Agent Tool Execution"
