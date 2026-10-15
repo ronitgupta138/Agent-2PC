@@ -207,6 +207,28 @@ enum Commands {
     /// Compact WAL by purging finalized transactions while preserving active in-flight state
     Compact,
 
+    /// Create a transactional savepoint checkpoint within an active transaction
+    Savepoint {
+        /// Target transaction ID
+        #[arg(long)]
+        tid: String,
+
+        /// Savepoint name identifier
+        #[arg(long)]
+        name: String,
+    },
+
+    /// Roll back transaction changes staged after the specified savepoint
+    RollbackTo {
+        /// Target transaction ID
+        #[arg(long)]
+        tid: String,
+
+        /// Savepoint name to restore
+        #[arg(long)]
+        name: String,
+    },
+
     /// Execute a multi-step atomic transaction plan from a batch JSON manifest
     RunBatch {
         /// Path to batch transaction JSON file
@@ -849,6 +871,50 @@ fn run_cli(cli: Cli) -> Result<(), TxError> {
                 println!("Disk Space Reclaimed: {} bytes ({:.1}%)", saved, pct);
                 println!("Active Preserved:     {}", report.active_transactions);
                 println!("Finalized Purged:     {}", report.purged_transactions);
+            }
+        }
+
+        Commands::Savepoint { tid, name } => {
+            let mut coord = Coordinator::new(tx_dir)?;
+            let tid_obj = TransactionId::parse(&tid)?;
+            let sp = coord.savepoint(&tid_obj, &name)?;
+            if cli.json {
+                println!("{}", serde_json::to_string_pretty(&sp)?);
+            } else {
+                println!(
+                    "{} Created Savepoint `{}` in transaction {}",
+                    "✔".green().bold(),
+                    sp.name.cyan().bold(),
+                    tid.bold()
+                );
+                println!("Participants at Savepoint: {}", sp.participant_count);
+                println!("Receipts at Savepoint:     {}", sp.receipt_count);
+            }
+        }
+
+        Commands::RollbackTo { tid, name } => {
+            let mut coord = Coordinator::new(tx_dir)?;
+            let tid_obj = TransactionId::parse(&tid)?;
+            let mut dummy_resources: Vec<Box<dyn ResourceManager>> = Vec::new();
+            let unwound = coord.rollback_to(&tid_obj, &name, &mut dummy_resources[..])?;
+            if cli.json {
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "status": "ok",
+                        "tid": tid,
+                        "savepoint": name,
+                        "unwound_participants": unwound
+                    })
+                );
+            } else {
+                println!(
+                    "{} Rolled back transaction {} to savepoint `{}`",
+                    "✔".green().bold(),
+                    tid.bold(),
+                    name.cyan().bold()
+                );
+                println!("Unwound Participants: {}", unwound);
             }
         }
 
