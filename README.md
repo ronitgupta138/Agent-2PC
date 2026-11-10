@@ -456,3 +456,18 @@ If `agent-2pc` protects your workspaces from dirty repository state, broken synt
 ## 📜 License
 
 MIT License. Designed and engineered by [Ronit Gupta](https://github.com/ronitgupta138).
+## Protocol Summary
+
+This crate implements a crash-consistent Two-Phase Commit (2PC) protocol with Write-Ahead Log (WAL) support.
+
+**Key guarantees:**
+- Zero dirty state on failure
+- Zero hallucinated rollbacks
+- Automatic recovery from crash scenarios
+
+**Usage:**
+```rust
+// Recovery after process crash
+let recovery = Recovery::new(wal_path);
+recovery.recover().await?;
+```
