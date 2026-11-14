@@ -24,3 +24,4 @@ pub mod wasi;
 pub mod diff;
 pub mod bundle;
 pub mod git;
+pub mod heartbeat;
