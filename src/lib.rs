@@ -27,3 +27,4 @@ pub mod git;
 pub mod heartbeat;
 pub mod checksum;
 pub mod fencing;
+pub mod metrics;
