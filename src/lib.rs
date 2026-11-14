@@ -25,3 +25,4 @@ pub mod diff;
 pub mod bundle;
 pub mod git;
 pub mod heartbeat;
+pub mod checksum;
